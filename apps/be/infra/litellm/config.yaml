@@ -1,0 +1,47 @@
+# 실제 Provider 연동 설정 — 현재 OpenAI 키만 사용.
+# 사용: .env 에서 LITELLM_CONFIG=config.yaml 설정 후 `docker compose up -d litellm`
+#
+# 주의: Anthropic/Google 키가 아직 없으므로 claude-*/gemini-* 모델명은
+# OpenAI 모델로 라우팅되는 별칭이다 (앱의 모델 카탈로그/AUTO 라우팅이 깨지지 않도록).
+# 해당 Provider 키 확보 시 litellm_params 를 실제 모델로 교체할 것.
+model_list:
+  - model_name: gpt-4o
+    litellm_params:
+      model: openai/gpt-4o
+      api_key: os.environ/OPENAI_API_KEY
+  - model_name: gpt-4o-mini
+    litellm_params:
+      model: openai/gpt-4o-mini
+      api_key: os.environ/OPENAI_API_KEY
+
+  # ---- 임시 별칭 (OpenAI로 대체 라우팅) ----
+  - model_name: claude-sonnet-4-5
+    litellm_params:
+      model: openai/gpt-4o
+      api_key: os.environ/OPENAI_API_KEY
+  - model_name: claude-haiku-4-5
+    litellm_params:
+      model: openai/gpt-4o-mini
+      api_key: os.environ/OPENAI_API_KEY
+  - model_name: gemini-2.5-pro
+    litellm_params:
+      model: openai/gpt-4o
+      api_key: os.environ/OPENAI_API_KEY
+  - model_name: gemini-2.5-flash
+    litellm_params:
+      model: openai/gpt-4o-mini
+      api_key: os.environ/OPENAI_API_KEY
+
+  # ---- 임베딩 ----
+  - model_name: text-embedding-3-small
+    litellm_params:
+      model: openai/text-embedding-3-small
+      api_key: os.environ/OPENAI_API_KEY
+
+router_settings:
+  routing_strategy: simple-shuffle
+  fallbacks:
+    - gpt-4o: ["gpt-4o-mini"]
+
+general_settings:
+  master_key: os.environ/LITELLM_MASTER_KEY

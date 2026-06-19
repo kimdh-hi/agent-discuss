@@ -1,0 +1,21 @@
+node_modules/
+dist/
+data/
+.env
+*.sqlite
+*.sqlite-journal
+coverage/
+apps/be/storage/rag/
+
+# IDE / 툴
+.idea/
+.vscode/
+.claude/
+.omc/
+
+# macOS
+.DS_Store
+
+# 로그
+*.log
+npm-debug.log*

@@ -1,0 +1,28 @@
+{
+  "name": "agent-discuss",
+  "version": "0.1.0",
+  "private": true,
+  "description": "RAI Agent - 워크스페이스 기반 멀티 에이전트 PoC (NestJS + LangChain.js)",
+  "workspaces": [
+    "apps/be",
+    "apps/fe"
+  ],
+  "scripts": {
+    "dev": "concurrently -n be,fe -c blue,green \"npm -w apps/be run dev:server\" \"npm -w apps/fe run dev\"",
+    "dev:server": "npm -w apps/be run dev:server",
+    "build": "npm -w apps/be run build",
+    "build:fe": "npm -w apps/fe run build",
+    "start": "npm -w apps/be run start",
+    "lint": "npm -w apps/be run lint",
+    "test": "npm -w apps/be run test",
+    "test:e2e": "npm -w apps/be run test:e2e",
+    "infra:up": "npm -w apps/be run infra:up",
+    "infra:down": "npm -w apps/be run infra:down"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "moduleFileExtensions": ["js", "mjs", "json", "ts"],
+  "rootDir": ".",
+  "testEnvironment": "node",
+  "testRegex": ".e2e-spec.ts$",
+  "transform": {
+    "^.+\\.(t|j|mj)s$": "@swc/jest"
+  },
+  "transformIgnorePatterns": [],
+  "testTimeout": 30000
+}

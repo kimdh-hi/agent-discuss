@@ -1,0 +1,263 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>rai-agent</title>
+    <style>
+      body { font-family: system-ui, sans-serif; margin: 0; background: #0f1115; color: #e6e6e6; }
+      header { padding: 12px 20px; background: #171a21; border-bottom: 1px solid #262b36; }
+      main { display: grid; grid-template-columns: 340px 1fr; gap: 16px; padding: 16px; }
+      .panel { background: #171a21; border: 1px solid #262b36; border-radius: 8px; padding: 14px; }
+      h2 { font-size: 14px; margin: 0 0 10px; color: #9fb4ff; }
+      h3 { font-size: 13px; margin: 14px 0 6px; color: #8a93a6; }
+      input, textarea, select, button { width: 100%; box-sizing: border-box; margin: 4px 0; padding: 8px;
+        background: #0f1115; color: #e6e6e6; border: 1px solid #2c3340; border-radius: 6px; font-size: 13px; }
+      button { background: #2d6cdf; border: none; cursor: pointer; font-weight: 600; }
+      button.secondary { background: #2c3340; }
+      button:hover { filter: brightness(1.1); }
+      .row { display: flex; gap: 6px; }
+      .list { font-size: 13px; }
+      .item { padding: 6px 8px; border: 1px solid #2c3340; border-radius: 6px; margin: 4px 0; cursor: pointer; }
+      .item.active { border-color: #2d6cdf; }
+      .log { white-space: pre-wrap; font-size: 13px; line-height: 1.5; max-height: 70vh; overflow: auto; }
+      .turn { border-left: 3px solid #2d6cdf; padding: 4px 10px; margin: 8px 0; }
+      .turn.moderator { border-color: #d68a2d; }
+      .muted { color: #6b7280; font-size: 12px; }
+      label { font-size: 12px; color: #8a93a6; }
+    </style>
+  </head>
+  <body>
+    <header><strong>rai-agent</strong> <span class="muted">워크스페이스 기반 멀티 에이전트 PoC</span></header>
+    <main>
+      <section class="panel">
+        <h2>1. 로그인 / 워크스페이스</h2>
+        <input id="email" placeholder="email (dev 로그인)" value="dev@rsupport.com" />
+        <button onclick="login()">dev 로그인</button>
+        <div id="who" class="muted"></div>
+        <h3>워크스페이스</h3>
+        <div class="row"><input id="wsName" placeholder="새 워크스페이스 이름" /><button onclick="createWs()">생성</button></div>
+        <div id="wsList" class="list"></div>
+
+        <h2 style="margin-top:18px">2. 에이전트 생성</h2>
+        <input id="agName" placeholder="이름" />
+        <textarea id="agInstr" rows="3" placeholder="지침(시스템 프롬프트)"></textarea>
+        <label>지식베이스 임베딩 파일 (여러 개 선택 가능: pdf/docx/pptx/xlsx/txt/md/이미지 등)</label>
+        <input id="agFiles" type="file" multiple />
+        <textarea id="agDoc" rows="2" placeholder="(선택) 지식베이스 텍스트 직접 입력"></textarea>
+        <button onclick="createAgent()">에이전트 생성</button>
+        <h3>에이전트 목록</h3>
+        <div id="agList" class="list"></div>
+
+        <h2 style="margin-top:18px">2-1. 지식 문서 관리</h2>
+        <div id="docTarget" class="muted">에이전트를 선택하세요</div>
+        <label>문서 추가 업로드 (여러 개 가능)</label>
+        <input id="docFiles" type="file" multiple />
+        <button class="secondary" onclick="addDocs()">선택 에이전트에 문서 추가</button>
+        <div id="docList" class="list"></div>
+
+        <h2 style="margin-top:18px">4. 룸 생성</h2>
+        <input id="roomName" placeholder="룸 이름" />
+        <label>에이전트 선택 (다중: Ctrl/Cmd+클릭, 최소 1개)</label>
+        <select id="roomAgents" multiple size="5"></select>
+        <button onclick="createRoom()">룸 생성</button>
+        <h3>룸 목록</h3>
+        <select id="roomList" size="5" onchange="pickRoom(this.value)"></select>
+      </section>
+
+      <section class="panel">
+        <h2>3 / 5. 질의 · 룸 토론</h2>
+        <div id="target" class="muted">대상: (없음)</div>
+        <textarea id="prompt" rows="2" placeholder="에이전트 질문 또는 룸 토론 주제"></textarea>
+        <div class="row">
+          <button onclick="ask()">선택 에이전트에 질의</button>
+          <button class="secondary" onclick="discuss()">선택 룸에서 토론</button>
+        </div>
+        <div id="out" class="log"></div>
+      </section>
+    </main>
+
+    <script>
+      let token = '', wsId = '', agentId = '', roomId = '';
+      const H = () => ({ 'Content-Type': 'application/json', Authorization: 'Bearer ' + token });
+      const out = document.getElementById('out');
+      const setTarget = () =>
+        (document.getElementById('target').textContent =
+          `대상 에이전트: ${agentId || '-'} / 룸: ${roomId || '-'}`);
+
+      async function api(method, path, body) {
+        const res = await fetch(path, { method, headers: H(), body: body ? JSON.stringify(body) : undefined });
+        if (!res.ok) throw new Error((await res.json()).message || res.status);
+        return res.json();
+      }
+
+      // 멀티파트 업로드 — Content-Type 은 브라우저가 boundary 와 함께 자동 설정한다.
+      async function upload(path, files, fields) {
+        const fd = new FormData();
+        for (const f of files) fd.append('files', f, f.name);
+        for (const [k, v] of Object.entries(fields || {})) fd.append(k, v);
+        const res = await fetch(path, { method: 'POST', headers: { Authorization: 'Bearer ' + token }, body: fd });
+        if (!res.ok) throw new Error((await res.json().catch(() => ({}))).message || res.status);
+        return res.json();
+      }
+
+      async function login() {
+        const email = document.getElementById('email').value;
+        const r = await api('POST', '/auth/dev-login', { email });
+        token = r.token;
+        document.getElementById('who').textContent = `로그인: ${r.user.email}`;
+        loadWs();
+      }
+      async function loadWs() {
+        const list = await api('GET', '/workspaces');
+        document.getElementById('wsList').innerHTML = list
+          .map((w) => `<div class="item ${w.id === wsId ? 'active' : ''}" onclick="pickWs('${w.id}','${w.name}')">${w.name}</div>`)
+          .join('');
+      }
+      async function createWs() {
+        const name = document.getElementById('wsName').value || 'workspace';
+        const w = await api('POST', '/workspaces', { name });
+        pickWs(w.id, w.name);
+        loadWs();
+      }
+      function pickWs(id) { wsId = id; agentId = ''; roomId = ''; setTarget(); loadAgents(); loadRooms(); loadWs(); }
+
+      async function createAgent() {
+        if (!wsId) return alert('워크스페이스를 먼저 선택하세요');
+        const a = await api('POST', `/workspaces/${wsId}/agents`, {
+          name: document.getElementById('agName').value || 'agent',
+          instructions: document.getElementById('agInstr').value || '도움이 되는 어시스턴트',
+        });
+        // 생성 직후 선택한 임베딩 파일들을 업로드한다.
+        const filesEl = document.getElementById('agFiles');
+        if (filesEl.files && filesEl.files.length > 0) {
+          await upload(`/agents/${a.id}/documents`, filesEl.files);
+          filesEl.value = '';
+        }
+        const doc = document.getElementById('agDoc').value.trim();
+        if (doc) await api('POST', `/agents/${a.id}/documents`, { text: doc });
+        document.getElementById('agDoc').value = '';
+        await loadAgents();
+        pickAgent(a.id);
+      }
+      async function loadAgents() {
+        const list = await api('GET', `/workspaces/${wsId}/agents`);
+        document.getElementById('agList').innerHTML = list
+          .map((a) => `<div class="item ${a.id === agentId ? 'active' : ''}" onclick="pickAgent('${a.id}')">${a.name} <span class="muted">${a.id.slice(0,8)}</span></div>`)
+          .join('');
+        document.getElementById('roomAgents').innerHTML = list
+          .map((a) => `<option value="${a.id}">${a.name} (${a.id.slice(0,8)})</option>`)
+          .join('');
+      }
+      function pickAgent(id) { agentId = id; setTarget(); loadAgents(); loadDocs(); }
+
+      let docPollTimer = null;
+      const STATUS_LABEL = { processing: '처리중', ready: '완료', failed: '실패' };
+      async function loadDocs() {
+        const el = document.getElementById('docList');
+        const targetEl = document.getElementById('docTarget');
+        if (!agentId) { targetEl.textContent = '에이전트를 선택하세요'; el.innerHTML = ''; return; }
+        targetEl.textContent = `대상 에이전트: ${agentId.slice(0,8)}`;
+        const { items } = await api('GET', `/agents/${agentId}/documents`);
+        el.innerHTML = items.length
+          ? items.map((d) => {
+              const badge = STATUS_LABEL[d.status] || d.status;
+              const meta = d.status === 'ready' ? `${d.chunkCount} chunks`
+                : d.status === 'failed' ? (d.error || '실패') : (d.stage || 'processing');
+              return `<div class="item"><strong>${d.filename}</strong>
+                <span class="muted">[${badge}] ${meta}</span>
+                <button class="secondary" style="width:auto;padding:2px 8px;float:right" onclick="deleteDoc('${d.id}')">삭제</button></div>`;
+            }).join('')
+          : '<div class="muted">문서 없음</div>';
+        // 처리중 문서가 있으면 폴링.
+        if (docPollTimer) clearTimeout(docPollTimer);
+        if (items.some((d) => d.status === 'processing')) {
+          docPollTimer = setTimeout(loadDocs, 1500);
+        }
+      }
+      async function addDocs() {
+        if (!agentId) return alert('에이전트를 선택하세요');
+        const filesEl = document.getElementById('docFiles');
+        if (!filesEl.files || filesEl.files.length === 0) return alert('파일을 선택하세요');
+        await upload(`/agents/${agentId}/documents`, filesEl.files);
+        filesEl.value = '';
+        loadDocs();
+      }
+      async function deleteDoc(id) {
+        if (!confirm('이 문서를 삭제할까요?')) return;
+        await fetch(`/agents/${agentId}/documents/${id}`, { method: 'DELETE', headers: H() });
+        loadDocs();
+      }
+
+      async function createRoom() {
+        const agentIds = [...document.getElementById('roomAgents').selectedOptions].map((o) => o.value);
+        if (agentIds.length === 0) return alert('룸에 묶을 에이전트를 1개 이상 선택하세요');
+        try {
+          const r = await api('POST', `/workspaces/${wsId}/rooms`, {
+            name: document.getElementById('roomName').value || 'room',
+            agentIds,
+          });
+          roomId = r.id; setTarget(); loadRooms();
+        } catch (e) {
+          alert('룸 생성 실패: ' + e.message);
+        }
+      }
+      async function loadRooms() {
+        const list = await api('GET', `/workspaces/${wsId}/rooms`);
+        document.getElementById('roomList').innerHTML =
+          `<option value="" ${roomId ? '' : 'selected'} disabled>룸 선택…</option>` +
+          list
+            .map((r) => `<option value="${r.id}" ${r.id === roomId ? 'selected' : ''}>${r.name}</option>`)
+            .join('');
+      }
+      function pickRoom(id) { roomId = id; setTarget(); }
+
+      function stream(path, body, onEvent) {
+        out.innerHTML = '';
+        return fetch(path, { method: 'POST', headers: H(), body: JSON.stringify(body) }).then(async (res) => {
+          const reader = res.body.getReader();
+          const dec = new TextDecoder();
+          let buf = '';
+          while (true) {
+            const { value, done } = await reader.read();
+            if (done) break;
+            buf += dec.decode(value, { stream: true });
+            const parts = buf.split('\n\n');
+            buf = parts.pop();
+            for (const block of parts) {
+              const ev = (block.match(/event: (.*)/) || [])[1];
+              const data = (block.match(/data: (.*)/) || [])[1];
+              if (ev && data) onEvent(ev, JSON.parse(data));
+            }
+          }
+        });
+      }
+
+      function ask() {
+        if (!agentId) return alert('에이전트를 선택하세요');
+        stream(`/agents/${agentId}/query`, { message: document.getElementById('prompt').value }, (ev, d) => {
+          if (ev === 'content') out.append(d.text);
+          else if (ev === 'source') out.insertAdjacentHTML('afterbegin', `<div class="muted">📚 참고지식 ${d.hits.length}건</div>`);
+          else if (ev === 'tool') out.insertAdjacentHTML('beforeend', `<div class="muted">🔧 ${d.name} (${d.phase})</div>`);
+          else if (ev === 'error') out.append('\n[error] ' + d.message);
+        });
+      }
+
+      function discuss() {
+        if (!roomId) return alert('룸을 선택하세요');
+        let cur = null;
+        stream(`/rooms/${roomId}/discuss`, { topic: document.getElementById('prompt').value }, (ev, d) => {
+          if (ev === 'turn' && d.phase === 'start') {
+            cur = document.createElement('div');
+            cur.className = 'turn ' + (d.role === 'moderator' ? 'moderator' : '');
+            cur.innerHTML = `<strong>${d.agentName}</strong> <span class="muted">R${d.round}</span><br>`;
+            out.appendChild(cur);
+          } else if (ev === 'content' && cur) cur.append(d.text);
+          else if (ev === 'status') out.insertAdjacentHTML('beforeend', `<div class="muted">— ${d.detail || d.phase} —</div>`);
+          else if (ev === 'final') out.insertAdjacentHTML('beforeend', `<div class="turn moderator"><strong>✅ 합의/결론</strong><br>${d.text}</div>`);
+          else if (ev === 'error') out.insertAdjacentHTML('beforeend', `<div class="muted">[error] ${d.message}</div>`);
+        });
+      }
+    </script>
+  </body>
+</html>

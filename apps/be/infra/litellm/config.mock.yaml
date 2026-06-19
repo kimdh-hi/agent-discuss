@@ -1,0 +1,38 @@
+# API 키 없이 전체 스택을 실행하기 위한 mock 설정 (기본값)
+# 모든 채팅 모델이 mock_response 로 고정 응답을 스트리밍한다.
+# 사용: docker compose up -d  (LITELLM_CONFIG 미지정 시 이 파일 사용)
+# 주의: mock 에는 임베딩 모델이 없으므로 임베딩은 EMBEDDINGS_PROVIDER=local 로 동작시킨다.
+model_list:
+  - model_name: gpt-4o
+    litellm_params:
+      model: openai/gpt-4o
+      api_key: mock-key
+      mock_response: "안녕하세요! gpt-4o mock 응답입니다. RAI PoC 환경에서 생성되었습니다."
+  - model_name: gpt-4o-mini
+    litellm_params:
+      model: openai/gpt-4o-mini
+      api_key: mock-key
+      mock_response: "mock 제목"
+  - model_name: claude-sonnet-4-5
+    litellm_params:
+      model: anthropic/claude-sonnet-4-5
+      api_key: mock-key
+      mock_response: "안녕하세요! claude-sonnet-4-5 mock 응답입니다."
+  - model_name: claude-haiku-4-5
+    litellm_params:
+      model: anthropic/claude-haiku-4-5
+      api_key: mock-key
+      mock_response: "claude-haiku mock 응답입니다."
+  - model_name: gemini-2.5-pro
+    litellm_params:
+      model: gemini/gemini-2.5-pro
+      api_key: mock-key
+      mock_response: "gemini-2.5-pro mock 응답입니다."
+  - model_name: gemini-2.5-flash
+    litellm_params:
+      model: gemini/gemini-2.5-flash
+      api_key: mock-key
+      mock_response: "gemini-2.5-flash mock 응답입니다."
+
+general_settings:
+  master_key: os.environ/LITELLM_MASTER_KEY

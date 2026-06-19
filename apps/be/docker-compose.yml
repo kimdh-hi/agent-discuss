@@ -1,0 +1,58 @@
+services:
+  # RAG 전용 DB — pgvector 설치. rai-agent 의 RAG 커넥션(RAG_DATABASE_URL)만 사용.
+  # 메인 데이터는 sqlite 라 별도 postgres 가 필요 없다(메인 DB 와 격리).
+  rag-postgres:
+    image: pgvector/pgvector:pg17
+    container_name: rai-agent-rag-postgres
+    environment:
+      POSTGRES_USER: rai
+      POSTGRES_PASSWORD: rai
+      POSTGRES_DB: rai_rag
+    # 상위 /rai 인프라(5433)와 공존하도록 호스트 포트만 5443 으로 분리(컨테이너는 5432 동일).
+    ports:
+      - "5443:5432"
+    volumes:
+      - ragpgdata:/var/lib/postgresql/data
+      - ./infra/postgres/rag-init.sql:/docker-entrypoint-initdb.d/rag-init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U rai -d rai_rag"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  litellm:
+    image: ghcr.io/berriai/litellm:main-stable
+    container_name: rai-agent-litellm
+    command: ["--config", "/app/config.yaml", "--port", "4000"]
+    # 호스트 포트만 4010 으로 분리(/rai litellm 4000 과 공존).
+    ports:
+      - "4010:4000"
+    environment:
+      LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY:-sk-rai-master}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+    volumes:
+      - ./infra/litellm/${LITELLM_CONFIG:-config.mock.yaml}:/app/config.yaml
+    healthcheck:
+      test: ["CMD-SHELL", "python3 -c \"import urllib.request,sys;urllib.request.urlopen('http://localhost:4000/health/liveliness')\" || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  # Office(docx/pptx/xlsx 등)→PDF 변환 서비스 (RAG 문서 추출의 OfficeConverter).
+  # LibreOffice 백엔드를 HTTP API 로 감싼다. 변환된 PDF 는 비전 전사 파이프라인을 탄다.
+  # 운영에서는 env 의 GOTENBERG_BASE_URL 만 바꾸면 된다.
+  gotenberg:
+    image: gotenberg/gotenberg:8
+    container_name: rai-agent-gotenberg
+    command:
+      - gotenberg
+      - --api-timeout=120s
+    # 호스트 포트만 13012 로 분리(/rai gotenberg 13002 와 공존).
+    ports:
+      - "13012:3000"
+    restart: unless-stopped
+
+volumes:
+  ragpgdata:
