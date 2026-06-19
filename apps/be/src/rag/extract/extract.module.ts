@@ -4,15 +4,12 @@ import { RAG_CONFIG, RagConfig } from '../config/rag-config';
 import { DocumentExtractorService } from './document-extractor.service';
 import { PdfRendererService } from './pdf-renderer.service';
 import { VisionTranscriberService } from './vision-transcriber.service';
-import { OfficeConverterService } from './office-converter.service';
 import { OfficeInspectorService } from './office-inspector.service';
 import { ImageLoader, OfficeLoader, PdfLoader, TextLoader } from './loaders';
 import {
   DOCUMENT_LOADERS,
   DocumentLoader,
-  OFFICE_CONVERTER,
   OFFICE_INSPECTOR,
-  OfficeConverter,
   OfficeInspector,
   PDF_RENDERER,
   PdfRenderer,
@@ -25,16 +22,14 @@ import {
   providers: [
     { provide: PDF_RENDERER, useClass: PdfRendererService },
     { provide: VISION_TRANSCRIBER, useClass: VisionTranscriberService },
-    { provide: OFFICE_CONVERTER, useClass: OfficeConverterService },
     { provide: OFFICE_INSPECTOR, useClass: OfficeInspectorService },
     {
       provide: DOCUMENT_LOADERS,
-      inject: [RAG_CONFIG, PDF_RENDERER, VISION_TRANSCRIBER, OFFICE_CONVERTER, OFFICE_INSPECTOR],
+      inject: [RAG_CONFIG, PDF_RENDERER, VISION_TRANSCRIBER, OFFICE_INSPECTOR],
       useFactory: (
         config: RagConfig,
         renderer: PdfRenderer,
         transcriber: VisionTranscriber,
-        converter: OfficeConverter,
         inspector: OfficeInspector,
       ): DocumentLoader[] => {
         const pdf = new PdfLoader(
@@ -45,7 +40,7 @@ import {
         );
         return [
           pdf,
-          new OfficeLoader(converter, inspector, pdf),
+          new OfficeLoader(inspector),
           new ImageLoader(transcriber),
           new TextLoader(),
         ];

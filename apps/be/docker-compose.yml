@@ -40,19 +40,5 @@ services:
       timeout: 5s
       retries: 10
 
-  # Office(docx/pptx/xlsx 등)→PDF 변환 서비스 (RAG 문서 추출의 OfficeConverter).
-  # LibreOffice 백엔드를 HTTP API 로 감싼다. 변환된 PDF 는 비전 전사 파이프라인을 탄다.
-  # 운영에서는 env 의 GOTENBERG_BASE_URL 만 바꾸면 된다.
-  gotenberg:
-    image: gotenberg/gotenberg:8
-    container_name: rai-agent-gotenberg
-    command:
-      - gotenberg
-      - --api-timeout=120s
-    # 호스트 포트만 13012 로 분리(/rai gotenberg 13002 와 공존).
-    ports:
-      - "13012:3000"
-    restart: unless-stopped
-
 volumes:
   ragpgdata:

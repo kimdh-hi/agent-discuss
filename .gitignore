@@ -1,21 +1,42 @@
 node_modules/
+
 dist/
-data/
+build/
+apps/fe/dist/
+
 .env
+.env.*
+!.env.example
+!.env.*.example
+
+infra/litellm/config.yaml
+
 *.sqlite
 *.sqlite-journal
-coverage/
+data/
 apps/be/storage/rag/
 
-# IDE / 툴
+coverage/
+
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+logs/
+
 .idea/
 .vscode/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
 .claude/
 .omc/
 
-# macOS
 .DS_Store
-
-# 로그
-*.log
-npm-debug.log*
+.AppleDouble
+.LSOverride

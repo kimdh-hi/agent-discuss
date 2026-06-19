@@ -42,11 +42,6 @@ export interface VisionTranscriber {
   transcribe(png: Buffer, context: TranscribeContext): Promise<string>;
 }
 
-export interface OfficeConverter {
-  readonly enabled: boolean;
-  convertToPdf(input: ExtractInput): Promise<Buffer>;
-}
-
 export interface OfficeProbe {
   hasRichContent: boolean;
   text: string;
@@ -59,7 +54,6 @@ export interface OfficeInspector {
 
 export const PDF_RENDERER = Symbol('PDF_RENDERER');
 export const VISION_TRANSCRIBER = Symbol('VISION_TRANSCRIBER');
-export const OFFICE_CONVERTER = Symbol('OFFICE_CONVERTER');
 export const OFFICE_INSPECTOR = Symbol('OFFICE_INSPECTOR');
 export const DOCUMENT_LOADERS = Symbol('DOCUMENT_LOADERS');
 
