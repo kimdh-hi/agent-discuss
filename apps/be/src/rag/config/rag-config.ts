@@ -16,6 +16,7 @@ const envSchema = z.object({
   DOC_PARSE_VISION_MODE: z.enum(['auto', 'always', 'off']).default('auto'),
   DOC_PARSE_MAX_PAGES: z.coerce.number().default(30),
   DOC_PARSE_TIMEOUT_MS: z.coerce.number().default(60000),
+  GOTENBERG_BASE_URL: z.string().default(''),
 });
 
 export type RagConfig = ReturnType<typeof loadRagConfig>;
@@ -35,6 +36,7 @@ export function loadRagConfig(env: NodeJS.ProcessEnv = process.env) {
     docParseVisionMode: parsed.DOC_PARSE_VISION_MODE,
     docParseMaxPages: parsed.DOC_PARSE_MAX_PAGES,
     docParseTimeoutMs: parsed.DOC_PARSE_TIMEOUT_MS,
+    gotenbergBaseUrl: parsed.GOTENBERG_BASE_URL,
   };
 }
 

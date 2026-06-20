@@ -5,7 +5,6 @@ import { SpeakerService } from './speaker.service';
 import { ConvergencePolicyService } from './convergence-policy.service';
 import { SpeakerSelectorService } from './speaker-selector.service';
 import { ConclusionWriterService } from './conclusion-writer.service';
-import { DiscussionGraphFactory } from './discussion-graph';
 import { TopicSetupService } from './topic-setup.service';
 import { RoutingService } from './routing.service';
 import { TurnService } from './turn.service';
@@ -96,7 +95,6 @@ function buildService(overrides: {
   const turn = new TurnService(speakerSvc, {} as unknown as RagService, convergence);
   const ledger = new LedgerService(moderator);
   const service = new OrchestratorService(
-    new DiscussionGraphFactory(),
     setup,
     routing,
     turn,

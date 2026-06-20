@@ -1,9 +1,10 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ReplaySubject } from 'rxjs';
+import { StateGraph, START, END } from '@langchain/langgraph';
 import { DiscussionRunOptions, RoomAgentSpec, RoomEvent, TurnEntry } from './orchestrator.types';
+import { DiscussionState } from './discussion-state';
 import { RunContext } from './run-context';
 import { DISCUSSION_LIMITS, graphRecursionLimit } from './discussion-limits';
-import { DiscussionGraphFactory, DiscussionNodes } from './discussion-graph';
 import { TopicSetupService } from './topic-setup.service';
 import { RoutingService } from './routing.service';
 import { TurnService } from './turn.service';
@@ -15,7 +16,6 @@ export class OrchestratorService {
   private readonly logger = new Logger(OrchestratorService.name);
 
   constructor(
-    private readonly graphFactory: DiscussionGraphFactory,
     private readonly setup: TopicSetupService,
     private readonly routing: RoutingService,
     private readonly turn: TurnService,
@@ -48,7 +48,7 @@ export class OrchestratorService {
     const skipGate = options.skipGate ?? false;
 
     const ctx: RunContext = { topic, agents, events, maxTurns, initialTurn, signal: options.signal };
-    const graph = this.graphFactory.compile(this.bindNodes(ctx, skipGate));
+    const graph = this.buildGraph(ctx, skipGate);
 
     try {
       const result = await graph.invoke(
@@ -71,18 +71,25 @@ export class OrchestratorService {
     }
   }
 
-  private bindNodes(ctx: RunContext, skipGate: boolean): DiscussionNodes {
-    return {
-      validateTopic: (s) => this.setup.validateTopic(s, ctx, skipGate),
-      rejectTopic: () => this.setup.rejectTopic(ctx),
-      defineAgenda: (s) => this.setup.defineAgenda(s, ctx),
-      moderate: (s) => this.routing.moderate(s, ctx),
-      speak: (s) => this.turn.speak(s, ctx),
-      updateIssues: (s) => this.ledger.updateIssues(s, ctx),
-      compactHistory: (s) => this.ledger.compactHistory(s, ctx),
-      draftConclusion: (s) => this.conclusion.draftConclusion(s, ctx),
-      reviewConclusion: (s) => this.routing.reviewConclusion(s, ctx),
-      writeResult: (s) => this.conclusion.writeResult(s, ctx),
-    };
+  private buildGraph(ctx: RunContext, skipGate: boolean) {
+    return new StateGraph(DiscussionState)
+      .addNode('validateTopic', (s: DiscussionState) => this.setup.validateTopic(s, ctx, skipGate), { ends: ['defineAgenda', 'rejectTopic'] })
+      .addNode('rejectTopic', () => this.setup.rejectTopic(ctx))
+      .addNode('defineAgenda', (s: DiscussionState) => this.setup.defineAgenda(s, ctx))
+      .addNode('moderate', (s: DiscussionState) => this.routing.moderate(s, ctx), { ends: ['speak', 'draftConclusion', END] })
+      .addNode('speak', (s: DiscussionState) => this.turn.speak(s, ctx), { ends: ['updateIssues', END] })
+      .addNode('updateIssues', (s: DiscussionState) => this.ledger.updateIssues(s, ctx))
+      .addNode('compactHistory', (s: DiscussionState) => this.ledger.compactHistory(s, ctx))
+      .addNode('draftConclusion', (s: DiscussionState) => this.conclusion.draftConclusion(s, ctx))
+      .addNode('reviewConclusion', (s: DiscussionState) => this.routing.reviewConclusion(s, ctx), { ends: ['writeResult', 'speak'] })
+      .addNode('writeResult', (s: DiscussionState) => this.conclusion.writeResult(s, ctx))
+      .addEdge(START, 'validateTopic')
+      .addEdge('rejectTopic', END)
+      .addEdge('defineAgenda', 'moderate')
+      .addEdge('updateIssues', 'compactHistory')
+      .addEdge('compactHistory', 'moderate')
+      .addEdge('draftConclusion', 'reviewConclusion')
+      .addEdge('writeResult', END)
+      .compile();
   }
 }

@@ -52,9 +52,15 @@ export interface OfficeInspector {
   probe(input: ExtractInput): OfficeProbe;
 }
 
+export interface OfficeConverter {
+  readonly enabled: boolean;
+  convertToPdf(input: ExtractInput): Promise<Buffer>;
+}
+
 export const PDF_RENDERER = Symbol('PDF_RENDERER');
 export const VISION_TRANSCRIBER = Symbol('VISION_TRANSCRIBER');
 export const OFFICE_INSPECTOR = Symbol('OFFICE_INSPECTOR');
+export const OFFICE_CONVERTER = Symbol('OFFICE_CONVERTER');
 export const DOCUMENT_LOADERS = Symbol('DOCUMENT_LOADERS');
 
 export function fileExt(filename: string): string {

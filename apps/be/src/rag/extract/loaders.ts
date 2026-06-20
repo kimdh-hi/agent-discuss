@@ -2,6 +2,7 @@ import {
   DocumentLoader,
   ExtractInput,
   ExtractResult,
+  OfficeConverter,
   OfficeInspector,
   PdfRenderer,
   VisionMode,
@@ -110,17 +111,37 @@ export class OfficeLoader implements DocumentLoader {
     'odt', 'odp', 'ods', 'rtf', 'hwp', 'hwpx',
   ]);
 
-  constructor(private readonly inspector: OfficeInspector) {}
+  constructor(
+    private readonly converter: OfficeConverter,
+    private readonly inspector: OfficeInspector,
+    private readonly pdfLoader: PdfLoader,
+  ) {}
 
   supports(input: ExtractInput): boolean {
     if (!OfficeLoader.EXTS.has(fileExt(input.filename))) return false;
-    return this.inspector.isOoxml(input);
+    return this.converter.enabled || this.inspector.isOoxml(input);
   }
 
   async load(input: ExtractInput): Promise<ExtractResult> {
-    const { text } = this.inspector.probe(input);
-    const md = text.trim();
-    return { markdown: md, pageCount: md ? 1 : 0, mode: md ? 'text' : 'empty' };
+    if (this.inspector.isOoxml(input)) {
+      const { hasRichContent, text } = this.inspector.probe(input);
+      if (!hasRichContent) {
+        const md = text.trim();
+        return { markdown: md, pageCount: md ? 1 : 0, mode: md ? 'text' : 'empty' };
+      }
+      if (!this.converter.enabled) {
+        const md = text.trim();
+        return { markdown: md, pageCount: md ? 1 : 0, mode: md ? 'text' : 'empty' };
+      }
+    }
+    if (!this.converter.enabled) return { markdown: '', pageCount: 0, mode: 'empty' };
+
+    const pdf = await this.converter.convertToPdf(input);
+    return this.pdfLoader.load({
+      filename: input.filename.replace(/\.[^.]+$/, '.pdf'),
+      mimeType: 'application/pdf',
+      buffer: pdf,
+    });
   }
 }
 
