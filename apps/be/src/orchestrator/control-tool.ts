@@ -32,3 +32,26 @@ export function toTurnSignal(args: Record<string, unknown>): TurnSignal {
   const passReason = typeof args.passReason === 'string' && args.passReason.trim() ? args.passReason : null;
   return { yieldTo, passReason, done: args.done === true };
 }
+
+export const SIGNAL_TEXT_MARKER = /```control|signal_turn\s*[=(:]/i;
+
+export function extractSignalFromText(content: string): { signal: TurnSignal; cleaned: string } {
+  const marker = content.search(SIGNAL_TEXT_MARKER);
+  if (marker < 0) return { signal: NO_SIGNAL, cleaned: content };
+
+  const block = content.slice(marker);
+  const cleaned = content.slice(0, marker).trimEnd();
+
+  const done = /["']?done["']?\s*:\s*(true|false)/i.exec(block);
+  const yieldTo = /["']?yieldTo["']?\s*:\s*(?:'([^']*)'|"([^"]*)"|null)/i.exec(block);
+  const passReason = /["']?passReason["']?\s*:\s*(?:'([^']*)'|"([^"]*)"|null)/i.exec(block);
+
+  return {
+    signal: toTurnSignal({
+      done: done ? done[1].toLowerCase() === 'true' : false,
+      yieldTo: yieldTo ? yieldTo[1] ?? yieldTo[2] ?? null : null,
+      passReason: passReason ? passReason[1] ?? passReason[2] ?? null : null,
+    }),
+    cleaned,
+  };
+}
