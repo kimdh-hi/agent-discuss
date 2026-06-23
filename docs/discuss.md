@@ -135,18 +135,19 @@ interface ParticipantStat { turns: number; newClaims: number; repeatClaims: numb
 
 ## 발언권 넘김 제어 블록
 
-각 에이전트는 발언 끝에 다음 제어 블록을 덧붙인다(사용자에게 노출 안 됨).
-
-````
-```control
-{"yieldTo": "<듣고 싶은 참가자 id 또는 null>", "passReason": "<지목 이유 또는 null>", "done": <마무리 가능하면 true>}
-```
-````
+각 에이전트는 발언을 마치며 제어 신호(`yieldTo`·`passReason`·`done`)를 넘긴다.
 
 - `yieldTo` — 특정인을 지목하거나 `null`(플로어 개방).
 - `done` — 디렉터에 `lastDone`으로 전달돼 종료 판단 힌트가 된다.
 
-발언권 넘김은 에이전트가 *요청*하고 감독자(`moderate`)가 가드를 거쳐 *승인/거부*하는 계약이다. `SpeakerService`가 스트리밍 중 제어 블록 시작 토큰(`` ```control ``)을 감지해 이후 텍스트를 버퍼링하고 `{ content, yieldTo, passReason, done }`로 분리한다. 누락/파싱 실패 시 `{ yieldTo: null, passReason: null, done: false }`.
+발언권 넘김은 에이전트가 *요청*하고 감독자(`moderate`)가 가드를 거쳐 *승인/거부*하는 계약이다.
+
+신호 전달 채널은 두 가지이며 `SpeakerService.speak`가 둘 다 수용한다.
+
+1. **`signal_turn` 툴 호출**(우선) — 에이전트가 발언 끝에 `signal_turn` 툴을 호출하면 그 인자에서 신호를 캡처한다(`control-tool.ts:toTurnSignal`).
+2. **텍스트형 폴백** — 모델이 툴 호출 대신 본문에 `signal_turn = {...}`(또는 레거시 ` ```control ` 블록)을 텍스트로 출력하면, `control-tool.ts:extractSignalFromText`가 필드 단위로 신호를 파싱하고 본문에서 그 블록을 제거한다.
+
+어느 경우든 사용자에게 노출되는 발언(`content` 이벤트·`turnLog`)에는 신호 텍스트가 남지 않는다. 스트리밍 중 신호 시작 마커(`signal_turn`/`` ```control ``)를 감지하면 이후 텍스트의 `content` 발행을 멈추고(청크 경계 분할 방지를 위해 마커 길이만큼 tail 버퍼링), 누적 본문은 반환 직전 `extractSignalFromText`로 한 번 더 정제한다. 신호 누락/파싱 실패 시 `{ yieldTo: null, passReason: null, done: false }`.
 
 ---
 

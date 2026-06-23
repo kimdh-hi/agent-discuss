@@ -6,7 +6,17 @@ import { SearchHit } from '../rag/rag.interfaces';
 import { RoomEvent } from './orchestrator.types';
 import { Prompt, toMessages } from './prompts';
 import { DiscussionConfig } from './discussion-config';
-import { buildSignalTurnTool, NO_SIGNAL, SIGNAL_TURN_TOOL, toTurnSignal, TurnSignal } from './control-tool';
+import {
+  buildSignalTurnTool,
+  extractSignalFromText,
+  NO_SIGNAL,
+  SIGNAL_TEXT_MARKER,
+  SIGNAL_TURN_TOOL,
+  toTurnSignal,
+  TurnSignal,
+} from './control-tool';
+
+const SIGNAL_MARKER_TAIL = 16;
 
 export interface SpeakerMeta {
   role: 'moderator' | 'agent';
@@ -59,6 +69,9 @@ export class SpeakerService {
 
     let content = '';
     let signal: TurnSignal = NO_SIGNAL;
+    let capturedFromTool = false;
+    let pending = '';
+    let signalSeen = false;
 
     for await (const part of this.llm.stream({
       model,
@@ -68,6 +81,7 @@ export class SpeakerService {
     })) {
       if (part.type === 'tool_call' && part.name === SIGNAL_TURN_TOOL) {
         signal = toTurnSignal(part.args);
+        capturedFromTool = true;
         break;
       }
       if (part.type === 'tool_call') {
@@ -78,16 +92,38 @@ export class SpeakerService {
         if (hits.length > 0) events.next({ type: 'source', agentId: meta.agentId, hits });
       } else if (part.type === 'text') {
         content += part.text;
-        if (!options.silent) events.next({ type: 'content', agentId: meta.agentId, text: part.text });
+        if (options.silent || signalSeen) continue;
+        pending += part.text;
+        const markerIdx = pending.search(SIGNAL_TEXT_MARKER);
+        if (markerIdx >= 0) {
+          this.emitContent(events, meta.agentId, pending.slice(0, markerIdx));
+          signalSeen = true;
+          pending = '';
+        } else {
+          const safe = pending.length - SIGNAL_MARKER_TAIL;
+          if (safe > 0) {
+            this.emitContent(events, meta.agentId, pending.slice(0, safe));
+            pending = pending.slice(safe);
+          }
+        }
       }
     }
 
+    if (!signalSeen) this.emitContent(events, meta.agentId, pending);
+
+    const fromText = extractSignalFromText(content.trim());
+    const finalSignal = capturedFromTool ? signal : fromText.signal;
+
     events.next({ type: 'turn_end', agentId: meta.agentId });
     return {
-      content: content.trim(),
-      yieldTo: signal.yieldTo,
-      passReason: signal.passReason,
-      done: signal.done,
+      content: fromText.cleaned.trim(),
+      yieldTo: finalSignal.yieldTo,
+      passReason: finalSignal.passReason,
+      done: finalSignal.done,
     };
+  }
+
+  private emitContent(events: Subject<RoomEvent>, agentId: string | undefined, text: string): void {
+    if (text) events.next({ type: 'content', agentId, text });
   }
 }
