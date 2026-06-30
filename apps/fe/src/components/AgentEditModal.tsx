@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { apiFetch, apiUpload } from '../lib/api';
-import type { Agent, Document } from '../lib/types';
+import type { Agent, AgentMemory, Document } from '../lib/types';
 
 interface Props {
   agent: Agent;
@@ -8,7 +8,13 @@ interface Props {
   onUpdated: (agent: Agent) => void;
 }
 
-type Tab = 'settings' | 'docs';
+type Tab = 'settings' | 'docs' | 'memory';
+
+function formatMemoryDate(value: string | null): string {
+  if (!value) return '';
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? '' : date.toLocaleString();
+}
 
 const STATUS_LABEL: Record<string, string> = {
   processing: '처리 중',
@@ -48,6 +54,10 @@ export default function AgentEditModal({ agent, onClose, onUpdated }: Props) {
   const fileRef = useRef<HTMLInputElement>(null);
   const pollRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  const [memories, setMemories] = useState<AgentMemory[]>([]);
+  const [memoriesLoading, setMemoriesLoading] = useState(false);
+  const [memoriesError, setMemoriesError] = useState<string | null>(null);
+
   const loadDocs = () => {
     apiFetch<{ items: Document[] }>(`/agents/${agent.id}/documents`)
       .then((d) => {
@@ -59,8 +69,20 @@ export default function AgentEditModal({ agent, onClose, onUpdated }: Props) {
       .catch(() => {});
   };
 
+  const loadMemories = () => {
+    setMemoriesLoading(true);
+    setMemoriesError(null);
+    apiFetch<{ items: AgentMemory[] }>(`/agents/${agent.id}/memories`)
+      .then((d) => setMemories(d.items))
+      .catch((err) =>
+        setMemoriesError(err instanceof Error ? err.message : '장기 메모리 조회 실패'),
+      )
+      .finally(() => setMemoriesLoading(false));
+  };
+
   useEffect(() => {
     if (tab === 'docs') loadDocs();
+    if (tab === 'memory') loadMemories();
     return () => {
       if (pollRef.current) clearTimeout(pollRef.current);
     };
@@ -141,6 +163,14 @@ export default function AgentEditModal({ agent, onClose, onUpdated }: Props) {
             {docs.length > 0 && (
               <span className="ml-1.5 rounded-full bg-zinc-700 px-1.5 py-0.5 text-[10px] text-zinc-300">
                 {docs.length}
+              </span>
+            )}
+          </button>
+          <button type="button" className={tabCls('memory')} onClick={() => setTab('memory')}>
+            장기 메모리
+            {memories.length > 0 && (
+              <span className="ml-1.5 rounded-full bg-zinc-700 px-1.5 py-0.5 text-[10px] text-zinc-300">
+                {memories.length}
               </span>
             )}
           </button>
@@ -251,6 +281,49 @@ export default function AgentEditModal({ agent, onClose, onUpdated }: Props) {
                       >
                         <TrashIcon />
                       </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+
+            <div className="flex justify-end">
+              <button type="button" className="btn btn-ghost" onClick={onClose}>
+                닫기
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* 장기 메모리 탭 */}
+        {tab === 'memory' && (
+          <div className="flex flex-col gap-3 p-5">
+            <p className="text-[11px] text-zinc-500">
+              과거 토론에서 이 에이전트가 축적한 장기 기억입니다. 새 토론을 시작할 때 관련 기억이 자동으로 회상됩니다.
+            </p>
+
+            {memoriesError && <p className="text-xs text-red-400">{memoriesError}</p>}
+
+            <div className="max-h-72 overflow-y-auto">
+              {memoriesLoading ? (
+                <p className="py-8 text-center text-xs text-zinc-500">불러오는 중…</p>
+              ) : memories.length === 0 ? (
+                <p className="py-8 text-center text-xs text-zinc-500">
+                  아직 축적된 장기 메모리가 없습니다.
+                </p>
+              ) : (
+                <ul className="space-y-1.5">
+                  {memories.map((memory) => (
+                    <li
+                      key={memory.id}
+                      className="rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2"
+                    >
+                      <p className="whitespace-pre-wrap text-sm text-zinc-200">{memory.content}</p>
+                      {formatMemoryDate(memory.createdAt) && (
+                        <p className="mt-1 text-[11px] text-zinc-500">
+                          {formatMemoryDate(memory.createdAt)}
+                        </p>
+                      )}
                     </li>
                   ))}
                 </ul>

@@ -26,6 +26,14 @@ export interface Document {
   stage?: string;
 }
 
+export interface AgentMemory {
+  id: string;
+  agentId: string;
+  content: string;
+  sourceTopicId: string | null;
+  createdAt: string | null;
+}
+
 export interface Room {
   id: string;
   name: string;

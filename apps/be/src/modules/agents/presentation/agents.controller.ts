@@ -138,6 +138,13 @@ export class AgentsController {
     return { items };
   }
 
+  @Get('agents/:agentId/memories')
+  @UseGuards(WorkspaceMemberGuard)
+  async listMemories(@ScopedAgent() agent: Agent) {
+    const items = await this.agents.listMemories(agent.id);
+    return { items };
+  }
+
   @Delete('agents/:agentId/documents/:documentId')
   @UseGuards(WorkspaceMemberGuard)
   @HttpCode(204)

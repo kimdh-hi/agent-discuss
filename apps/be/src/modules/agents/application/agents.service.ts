@@ -9,6 +9,8 @@ import { ChatMessage, StreamPart } from '../../../common/ai/llm/llm.types';
 import { RagService, Uploader } from '../../rag/application/rag.service';
 import { buildToolsForAgent } from '../../agent-rooms/application/discussion/agent-tools';
 import { DocumentDto, SearchHit, UploadFileInput } from '../../rag/application/rag.interfaces';
+import { AgentMemoryService } from '../../agent-memory/application/agent-memory.service';
+import { AgentMemoryDto } from '../../agent-memory/domain/agent-memory';
 
 export interface CreateAgentInput {
   name: string;
@@ -31,6 +33,7 @@ export class AgentsService {
     @InjectRepository(Message) private readonly messageRepository: EntityRepository<Message>,
     private readonly llm: LlmService,
     private readonly rag: RagService,
+    private readonly memory: AgentMemoryService,
   ) {}
 
   async create(workspaceId: string, input: CreateAgentInput): Promise<Agent> {
@@ -85,6 +88,10 @@ export class AgentsService {
 
   async deleteDocument(agentId: string, documentId: string): Promise<void> {
     await this.rag.deleteDocument(agentId, documentId);
+  }
+
+  async listMemories(agentId: string): Promise<AgentMemoryDto[]> {
+    return this.memory.listByAgent(agentId);
   }
 
   async getRawDocument(agentId: string, documentId: string) {
