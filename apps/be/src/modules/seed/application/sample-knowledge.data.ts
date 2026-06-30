@@ -6,541 +6,278 @@ export interface SampleKnowledgeDocument {
 
 export const SAMPLE_KNOWLEDGE_DOCUMENTS: SampleKnowledgeDocument[] = [
   {
-    agentName: "PM",
-    filename: "pm-agent.md",
-    content: `# 제품 개발 운영 가이드 — PM
+    agentName: "agent-discuss-PM",
+    filename: "agent-discuss-pm.md",
+    content: `# agent-discuss 제품 정의서 — PM
 
-## 스프린트 계획 프로세스
-스프린트 주기: 2주 (월요일 시작, 금요일 스프린트 리뷰)
-- 스프린트 계획(Planning): 스프린트 1일차 오전, 최대 4시간
-- 데일리 스탠드업: 매일 오전 10시, 15분 이내
-- 스프린트 리뷰: 스프린트 마지막 날 오후, 1시간
-- 회고(Retrospective): 리뷰 직후, 45분
+## 한 줄 정의
+워크스페이스 기반 멀티 에이전트 PoC. 사용자가 워크스페이스 안에 에이전트(이름·지침·모델·전용 지식베이스)를 만들고, 단일 에이전트에 질의하거나 여러 에이전트를 룸(Room)으로 묶어 오케스트레이터 주도 토론을 진행한다.
 
-## 백로그 우선순위 프레임워크 (MoSCoW)
-- Must Have: 출시 기준이 되는 P0 기능. 없으면 릴리즈 불가.
-- Should Have: 높은 비즈니스 가치. 이번 릴리즈에 포함 목표.
-- Could Have: 있으면 좋지만 제거해도 릴리즈 가능.
-- Won't Have: 이번 릴리즈 범위 밖. 차기 로드맵으로 이동.
+## 제품의 4개 축
+- 워크스페이스 & 멀티테넌트: 모든 리소스(에이전트·룸·지식베이스·토론)가 워크스페이스 단위로 격리. 생성자가 owner.
+- 에이전트: 이름·지침(instructions)·설명·모델 + 에이전트별 RAG 지식베이스. 단일 질의 시 SSE 스트리밍 응답.
+- RAG 지식베이스: 문서를 적재하면 자동 청킹·임베딩·저장. 모델이 필요하다고 판단하면 rag_search 도구로 검색.
+- 룸 토론: 여러 에이전트를 룸으로 묶고 topic을 던지면 LangGraph가 오케스트레이터 주도로 토론을 진행하고 결론을 종합.
 
-## 스토리 포인트 기준
-- 1pt: 1~2시간 내 완료 (설정값 변경, 문구 수정)
-- 2pt: 반나절 (단일 API 수정, UI 컴포넌트 1개)
-- 3pt: 1일 (새 API 엔드포인트 + 단순 UI)
-- 5pt: 2~3일 (신규 기능 개발)
-- 8pt: 스프린트 하나를 대부분 차지. 8pt 이상은 에픽으로 분리.
-- 스프린트 팀 총 velocity 기준: 40~50pt (개발자 4인 기준)
+## PoC 범위 (Scope)
+포함:
+- dev 로그인(이메일만으로 JWT 발급), 워크스페이스 CRUD + 멤버 추가
+- 에이전트 CRUD, 문서 적재, 단일 질의(SSE)
+- 룸 CRUD, topic 생성/이어가기, 룸 토론(SSE 실시간 스트리밍)
+- 에이전트 장기 메모리(토론 결과 누적), LangGraph 영속성
 
-## 제품 핵심 KPI
-- DAU(일간 활성 사용자): 목표 500명 (3개월 내)
-- 기능 채택률: 신기능 출시 후 2주 내 DAU 30% 이상 사용
-- NPS(순고객추천지수): 40 이상 유지
-- 스프린트당 신규 P1 버그: 3건 이하
-- 출시 지연률: 스프린트 약속 기능의 90% 이상 납기 준수
+명시적 Non-goal (이번 PoC 범위 밖):
+- 운영 인증·RBAC·SSO (dev 로그인만 제공)
+- 과금/결제, 사용량 제한, 멀티 리전 배포
+- 모바일 네이티브 앱, 외부 공개 API 게이트웨이
 
-## 현재 분기 로드맵 (Q3)
-- 7월: 소셜 로그인(Google/Apple) 완성, 워크스페이스 CRUD, 채팅 SSE 스트리밍
-- 8월: RAG 문서 업로드 + 벡터 검색, 모바일 앱 iOS 베타 출시
-- 9월: Android 앱 정식 출시, 결제 시스템 연동, 관리자 대시보드
+## 핵심 사용자 플로우 (데모 성공 기준)
+1. POST /auth/dev-login 으로 로그인 → JWT 획득
+2. 워크스페이스 생성 → owner 멤버십 자동 부여
+3. 에이전트 2명 이상 생성 + 각 에이전트에 지식 문서 적재
+4. 단일 에이전트 질의 → rag_search 자동 호출 + SSE 토큰 스트리밍 확인
+5. 룸 생성(에이전트 묶기) → topic 던지기 → 다중 에이전트 토론 + 최종 결론 SSE 확인
+"이 5단계가 끊김 없이 완주되는가"가 릴리즈 Go의 1차 기준이다.
 
-## 사용자 스토리 작성 규칙
-형식: "나는 [역할]로서 [기능]을 원한다. 왜냐하면 [이유]이기 때문이다."
-인수 조건(AC): Given/When/Then 형식으로 3개 이상 작성.
-정의완료(DoD): 코드 리뷰 완료 + QA 승인 + 문서 업데이트 + 스테이징 배포.
+## 기능 우선순위 (MoSCoW, PoC 기준)
+- Must: 단일 질의 SSE, 룸 토론 전체 플로우, 워크스페이스 멤버십 격리, 문서 적재→검색.
+- Should: 에이전트 장기 메모리, 토론 결론 영속화, 진행 상태 SSE 이벤트.
+- Could: 임베딩 provider 전환(local/openai/litellm), 문서 비전 전사, Office→PDF 변환.
+- Won't: RBAC, 과금, 모바일 앱, 운영 모니터링 대시보드.
 
-## 배포 관리 및 릴리즈 프로세스
+## API 표면 (합의 근거로 사용)
+- 인증: POST /auth/dev-login
+- 워크스페이스: POST/GET /workspaces, POST /workspaces/:wsId/members
+- 에이전트: POST/GET /workspaces/:wsId/agents, GET/DELETE /agents/:agentId
+- 문서/질의: POST /agents/:agentId/documents, POST /agents/:agentId/query (SSE)
+- 룸: POST/GET /workspaces/:wsId/rooms, GET /rooms/:roomId, POST /rooms/:roomId/agents
+- topic: GET/POST /rooms/:roomId/topics, GET /rooms/:roomId/topics/:topicId/messages
+- 토론: POST /rooms/:roomId/topics/:topicId/discuss (SSE), POST /rooms/:roomId/discuss (SSE, 새 topic)
+- /auth/dev-login 외 전 라우트는 Authorization: Bearer 필요. :wsId/:agentId/:roomId 라우트는 멤버십 가드로 스코프.
 
-### 릴리즈 주기
-- 정기 배포: 격주 (스프린트 종료 다음 영업일 새벽 2~4시)
-- 긴급 핫픽스: P0 버그 확인 즉시, PM + 팀장 구두 승인 후 진행
-- 배포 공지: 서비스 영향 있는 배포 24시간 전 사용자 이메일 발송
+## 룸 토론 제품 관점 정의
+- 룸 생성 시 maxRounds 같은 필드는 없다. 턴 상한은 시스템이 "참가자 수 × 3, 최소 3턴"으로 자동 계산한다.
+- 사용자는 topic(title)만 던진다. 발언자 선택·종료 판단·결론 작성은 오케스트레이터가 담당한다.
+- 데모에서 사용자가 보는 것: 발언(누가/몇 라운드)·진행 상태·도구 호출(rag_search)·참고 지식(source)·최종 결론. 전부 SSE 이벤트.
 
-### Go/No-Go 의사결정 권한
-- 최종 Go/No-Go 결정권: PM (기술 판단은 백엔드·QA 의견 수렴 후 PM이 결정)
-- No-Go 후 재배포: 원인 해소 확인 후 최소 24시간 뒤 재시도
-- 롤백 지시 권한: PM 또는 온콜 엔지니어 (에러율 5% 초과 3분 지속 시 자동 판단)
-
-### 점진 배포(Canary) 및 Feature Flag 정책
-- 점진 롤아웃: 1% → 10% → 30% → 100% (각 단계 최소 30분 모니터링)
-- Feature Flag: LaunchDarkly 사용, PM이 플래그 ON/OFF 권한 보유
-- Kill Switch: P0 이슈 발생 시 PM 승인 없이 엔지니어가 즉시 플래그 OFF 가능
-
-### 배포 후 PM 모니터링 항목 (24시간)
-- DAU 이탈 여부 (전일 대비 10% 이상 감소 시 원인 파악)
-- 신기능 채택률 (배포 후 48시간 내 DAU 30% 이상 사용 목표)
-- 사용자 CS 인입 건수 (이전 주 동일 시간대 대비 200% 초과 시 알림)
-- NPS 점수 변동 (주간 NPS 40 미만 진입 시 원인 분석 착수)
-
-### 현재 릴리즈 현황 (v2.1.0)
-- 배포 예정: 2026-06-25(목) 02:00
-- 주요 기능: RAG 문서 업로드 비동기 처리, 벡터 검색 API
-- 사전 공지 발송 완료: 2026-06-24(수) 18:00
-- Q3 로드맵 연계: 8월 iOS 베타 출시를 위한 RAG 백엔드 필수 선행 조건`,
+## 의사결정 원칙
+- 기술 난이도 논쟁은 "데모에서 사용자가 무엇을 보고 무엇을 경험하는가"로 재프레이밍한다.
+- 범위 확장 요청은 Non-goal 목록과 대조해 차기 과제로 분리한다.
+- PoC이므로 "운영 완성도"보다 "핵심 플로우 완주 + 설명 가능성"을 우선한다.`,
   },
   {
-    agentName: "백엔드 엔지니어",
-    filename: "backend-engineer-agent.md",
-    content: `# 백엔드 기술 아키텍처 문서
+    agentName: "agent-discuss-BE",
+    filename: "agent-discuss-be.md",
+    content: `# agent-discuss 백엔드 아키텍처 — BE
 
 ## 기술 스택
-- Runtime: Node.js 22 LTS
-- Framework: NestJS 10 (모듈 기반 DI)
-- ORM: MikroORM 6 (PostgreSQL 드라이버, Unit of Work 패턴)
-- 메시지 큐: BullMQ (Redis 기반, 파일 처리 비동기화)
-- 캐시: Redis 7 (세션, Rate Limit, 조회 캐시)
-- 파일 스토리지: S3 호환 오브젝트 스토리지 (MinIO 로컬 / AWS S3 프로덕션)
-- 컨테이너: Docker + Kubernetes (EKS), HPA 적용 (CPU 70% 임계값)
+- Runtime: Node.js 22+ (MikroORM 7·LangChain 1.x·SQLite 드라이버가 ESM 전용이라 require(esm) 필요)
+- Framework: NestJS 11 (모듈 기반 DI)
+- ORM: MikroORM 7 — 메인 SQLite + RAG PostgreSQL 두 커넥션
+- LLM/그래프: LangChain.js 1.x, LangGraph 1.x (StateGraph), @langchain/openai(ChatOpenAI), @langchain/anthropic
+- 영속성: @langchain/langgraph-checkpoint-postgres (토론 상태 체크포인트)
+- 검증: Zod 4 (env 스키마·요청 파이프), 언어: TypeScript 6
+- 문서 추출: pdfjs-dist, cheerio, fflate, @napi-rs/canvas
+- 테스트: Jest + @swc/jest, e2e는 supertest
 
-## API 설계 원칙
-- REST 컨벤션: 리소스 중심 URL, 동사 금지 (GET /users, not GET /getUsers)
-- 응답 포맷 통일: { data: T, meta?: PaginationMeta, error?: ErrorDto }
-- HTTP 상태 코드: 200(조회), 201(생성), 204(삭제), 400(검증실패), 401(미인증), 403(권한없음), 404(미존재), 422(비즈니스룰위반), 429(과호출)
-- API 버저닝: URL 경로 방식 /v1/. Breaking change 시 /v2/ 신설, /v1/ 최소 6개월 병행 운영.
-- 페이지네이션: cursor 기반 (offset 방식 금지 — 대규모 데이터 성능 저하)
+## 모듈 & 레이어링 (DDD)
+모듈: auth, workspaces, agents, agent-rooms(룸+토론 오케스트레이터), rag, agent-memory, seed, common/ai/llm.
+각 모듈은 레이어로 나뉜다:
+- presentation: 컨트롤러, DTO, SSE 응답
+- application: 서비스, 유스케이스 (discussion/ 하위에 토론 노드 서비스들)
+- infrastructure: persistence(엔티티), langgraph 어댑터
+- domain: 순수 타입·규칙(room, discussion 등)
 
-## DB 스키마 주요 원칙
-- PK: UUID v7 (시간 정렬 가능, 인덱스 단편화 최소화)
-- Soft Delete: deleted_at 컬럼 사용. 실제 삭제 금지.
-- 감사 컬럼: created_at, updated_at 모든 테이블 필수.
-- 외래키: DB 레벨 FK 제약 사용 (ORM 레벨만으로 불충분).
-- 인덱스 전략: 조회 빈도 높은 컬럼 복합 인덱스, EXPLAIN ANALYZE로 쿼리 플랜 검증 필수.
-- 벡터 컬럼: pgvector HNSW 인덱스 (vector_cosine_ops), 차원 수 3072 (text-embedding-3-large 기준).
+## 데이터 접근 규칙 (프로젝트 강제 규약)
+- 서비스/가드에 EntityManager를 직접 주입하지 않는다.
+- MikroOrmModule.forFeature([Entity])로 모듈에 엔티티를 등록하고 @InjectRepository(Entity)로 EntityRepository<T>를 주입한다.
+- RAG 커넥션(contextName 'rag') 엔티티는 @InjectRepository(Entity, 'rag')로 주입한다.
+- EntityRepository에는 flush()가 없으므로 repo.getEntityManager().flush()를 사용한다.
+- 코드에는 주석을 작성하지 않는다.
 
-## 아키텍처 결정 사항 (ADR)
-- ADR-001: ORM으로 TypeORM 대신 MikroORM 채택 → Unit of Work 패턴, Identity Map 내장으로 N+1 문제 방지.
-- ADR-002: 파일 업로드 처리를 BullMQ 비동기 큐로 처리 → 업로드 요청 타임아웃 방지.
-- ADR-003: LLM 호출은 별도 llm.service로 격리 → Provider 변경 시 영향 범위 최소화.
-- ADR-004: SSE 스트리밍은 HTTP 롱폴링 채택, WebSocket 미사용 → 서버 상태 관리 불필요.
+## 도메인 엔티티 (메인 SQLite)
+- User(id, email, createdAt)
+- Workspace(id, name, ownerUserId, createdAt)
+- WorkspaceMember(id, workspaceId, userId, role, createdAt)
+- Agent(id, workspaceId, name, instructions, description?, model, tools?: string[], maxToolIterations?, createdAt)
+- Room(id, workspaceId, name, createdAt)
+- RoomAgent(id, roomId, agentId, createdAt) — (roomId, agentId) unique, 룸↔에이전트 M:N 조인
+- RoomTopic(id, roomId, title, status: open|running|completed|failed, finalText?, completedAt?, runState?: DiscussionSnapshot, createdAt)
+- RoomTopicMessage(id, topicId, role: user|agent|moderator, agentId?, round?, content, createdAt)
+- Message(id, scope: agent|room|topic, refId, role, agentId?, round?, content, createdAt)
 
-## 성능 SLA
-- API P95 응답시간: 200ms 이하 (LLM 제외)
-- LLM SSE 첫 토큰 도달(TTFT): 3초 이하
-- DB 커넥션 풀: PgBouncer 최대 100 커넥션
-- 캐시 히트율: 주요 조회 API 70% 이상
+## RAG 엔티티 (PostgreSQL + pgvector, 'rag' 커넥션)
+- Document(id, agentId(index), uploadedById?, uploadedByName?, filename, mimeType, size, status: processing|ready|failed, stage?: extracting|embedding, storageKey?, error?, chunkCount, createdAt, deletedAt? = soft delete)
+- DocumentChunk(id, documentId, content, embedding(vector, EMBEDDING_DIM 기본 1536), chunkIndex, createdAt)
+- 인덱스: document_chunks_document_id, HNSW(embedding vector_cosine_ops), content GIN FTS(to_tsvector simple)
 
-## 배포 절차 및 인프라 운영
+## RAG 파이프라인
+1. POST /agents/:agentId/documents 로 텍스트/파일 적재 → 원본 저장(local-fs-storage, 기본 storage/rag)
+2. 백그라운드 추출(extract): 텍스트 직접 적재 기본. DOC_PARSE_MODEL 설정 시 비전 전사, GOTENBERG_BASE_URL 설정 시 Office→PDF.
+3. 청킹(@langchain/textsplitters) → 임베딩 → DocumentChunk 저장. status processing→ready, 실패 시 failed + error.
+4. 검색: search.service가 HNSW 코사인 + FTS로 top-k(RAG_TOP_K 기본 5) 청크 반환. searchMany는 다중 쿼리 dedup.
+5. rag_search 도구: 단일 질의·룸 토론 발언 모두에 자동 바인딩. 결과는 SSE source 이벤트로 노출.
 
-### 배포 환경 및 파이프라인
-- 환경 순서: 로컬 → 스테이징(staging.agent-discuss.internal) → 프로덕션(agent-discuss.io)
-- 스테이징 배포: main 브랜치 머지 시 GitHub Actions 자동 배포
-- 프로덕션 배포: GitHub Actions workflow_dispatch 수동 트리거 (엔지니어 승인 필수)
-- 무중단 배포: Kubernetes Rolling Update (maxUnavailable: 0, maxSurge: 1)
-- 배포 소요 시간: 이미지 빌드 4분 + 롤링 업데이트 3분 = 총 약 7분
+## 임베딩 provider
+- EMBEDDINGS_PROVIDER: local(결정적 해시 n-gram, 키 불필요·기본) | openai | litellm
+- EMBEDDING_DIM 기본 1536. local은 표면형 매칭, openai/litellm으로 교체 시 의미 검색으로 향상.
+- RAG_DATABASE_URL 기본 postgresql://agent_discuss:agent_discuss@localhost:5432/agent_discuss_rag (docker compose: pgvector/pgvector:pg17).
 
-### DB 마이그레이션 가이드라인
-- 인덱스 추가: CREATE INDEX CONCURRENTLY 사용 (테이블 Lock 없음, 권장)
-- Lock 유발 작업(컬럼 추가·타입 변경): 유지보수 시간(새벽 2~4시) 한정 실행
-- 마이그레이션 검증: 스테이징에서 실행 시간 측정 후 프로덕션 예상 소요 산정
-- 롤백 스크립트: 모든 마이그레이션에 down 스크립트 작성 필수
-- 현재 예정 마이그레이션(v2.1.0): document_chunks 테이블 HNSW 인덱스 추가 — 예상 5분, Lock 발생 → 해당 시간 검색 API 503 응답
+## LLM 실행 (common/ai/llm)
+- LlmService.stream(): ChatOpenAI(model, temperature 0.4) 생성, tools 있으면 bindTools.
+- 도구 루프: maxToolIterations(기본 5)까지 stream→tool_calls 감지→tool 실행→ToolMessage push 반복.
+- StreamPart: text | tool_call | tool_result. LLM_PROVIDER=mock 이면 mockStream.
+- 단일 질의: 에이전트별 model 사용. 룸 토론: 발언은 에이전트별 model, 진행자 판단은 전역 LLM_MODEL.
 
-### Feature Flag 운영 (LaunchDarkly)
-- 네이밍 규칙: {feature}-{version} (예: rag-upload-v2, social-login-v1)
-- 점진 활성화: 1% → 10% → 30% → 100% (각 단계 30분 모니터링)
-- Kill Switch: P0 이슈 발생 시 플래그 OFF로 서비스 영향 즉시 격리
-- 플래그 정리: 100% 전환 후 다음 스프린트 내 코드에서 제거 (기술 부채 방지)
+## 룸 토론 오케스트레이터 (LangGraph StateGraph)
+흐름:
+1. validateTopic — 토론 가능한 주제인지 검토
+2. pickSpeaker — 다음 발언자 또는 종료 결정
+3. speakTurn — 한 턴에 에이전트 1명 발언 + 다음 발언자 hand-off 제안
+4. updateIssues → summarizeHistory — 발언에서 쟁점 갱신, 오래된 대화 압축
+5. pickSpeaker → speakTurn 루프 — hand-off 유효하면 바로 연결, 교착이면 디렉터(moderator) 개입
+6. draftDecision → checkCompletion → writeResult — 쟁점 해소 후 결론 확정안, 충족 시 최종 결론 종합
+- 턴 상한: 참가자 수 × 3, 최소 3턴 (룸 API에 maxRounds 필드 없음).
+- 핵심 서비스: speaker-selector, routing, turn, moderator, convergence-policy, conclusion-writer, topic-setup, discussion-brief, discussion-progress.
 
-### BullMQ 큐 운영 및 배포 절차
-- 배포 전 확인: ACTIVE 작업 0건 확인 (WAITING은 배포 후 자동 재개)
-- Worker graceful shutdown: 진행 중 작업 완료 후 종료, 최대 30초 대기
-- 배포 전 큐 pause: 대량 작업 처리 중일 경우 queue.pause() 후 배포
-- 현황(v2.1.0 배포 전): Redis 큐 잔여 작업 12건 → drain 또는 pause 필요
+## 인증 & 가드
+- POST /auth/dev-login: 이메일만으로 JWT 발급(없으면 User 자동 생성). 이후 전 라우트 Bearer 필요.
+- AuthGuard(JWT) + WorkspaceMemberGuard: 라우트 파라미터의 워크스페이스 멤버십 검증 → 비멤버 차단.
 
-### 롤백 기준 및 절차
-1. 에러율 5% 초과 3분 지속 → 즉시 롤백 시작
-2. P0 버그 확인 → PM 보고 후 롤백 실행 (PM 부재 시 온콜 엔지니어 자체 판단 가능)
-3. 롤백 방법: 이전 Docker 이미지로 Kubernetes deployment 재배포 (소요 약 3분)
-4. DB 롤백: migration down 실행 (Lock 유발 작업 포함 시 영향도 재검토)
-5. 롤백 후: 원인 분석 RCA 문서 작성 + 48시간 내 재배포 계획 수립
+## 응답 포맷 & SSE
+- SSE는 HTTP 스트리밍(롱폴링) 채택, WebSocket 미사용(서버 상태 관리 불필요).
+- 발언·상태·도구 호출·참고 지식(source)·최종 결론을 실시간 이벤트로 전달.
 
-### 모니터링 대시보드
-- 에러율: Sentry (임계값 1% → Slack #alerts 채널 알림)
-- API 응답시간: Datadog APM (P95 > 500ms → PagerDuty 알림)
-- 인프라: AWS CloudWatch (CPU > 70% → HPA 스케일 아웃)
-- 큐 상태: Bull Dashboard (내부망 admin.agent-discuss.internal/queues)`,
+## 운영 명령
+- npm run db-init: nest build 후 dist/db-init.js — 메인 SQLite 스키마 + sample-data/main.sql 적재.
+- npm run rag-init: nest build 후 dist/rag-init.js — pgvector 스키마/인덱스 + 샘플 지식 색인.
+- npm run lint(tsc --noEmit), npm run build(SWC), npm run test, npm run test:e2e, npm run infra:up/down.`,
   },
   {
-    agentName: "프론트엔드 엔지니어",
-    filename: "frontend-engineer-agent.md",
-    content: `# 프론트엔드 개발 가이드
+    agentName: "agent-discuss-FE",
+    filename: "agent-discuss-fe.md",
+    content: `# agent-discuss 프론트엔드 가이드 — FE
 
-## 기술 스택
-- Framework: Next.js 14 (App Router)
-- 언어: TypeScript 5
-- UI 컴포넌트: shadcn/ui (Radix UI 기반, 소스 직접 소유)
-- 스타일링: Tailwind CSS 3
-- 서버 상태: TanStack Query v5 (staleTime 5분, gcTime 30분)
-- 클라이언트 상태: Zustand v4
-- 폼 관리: React Hook Form + Zod
-- 번들러: Turbopack (Next.js 14 기본)
+## 기술 스택 (실제 구성)
+- Framework: React 19 (react-dom 19)
+- 번들러/dev 서버: Vite 6 (@vitejs/plugin-react), dev 포트 4070
+- 언어: TypeScript 5.7
+- 스타일링: Tailwind CSS v4 (@tailwindcss/vite 플러그인, index.css에서 로드)
+- 클라이언트 상태: Zustand 5
+- 마크다운 렌더링: react-markdown + remark-gfm
+- 주의: Next.js·shadcn/ui·TanStack Query·Redux는 사용하지 않는다. 경량 SPA.
 
-## 컴포넌트 설계 원칙 (Atomic Design)
-- Atoms: 최소 단위 UI (Button, Input, Badge). 외부 의존성 없음.
-- Molecules: Atom 조합 (SearchInput = Input + Button). 최소한의 로직.
-- Organisms: 독립 기능 단위 (ChatMessage, AgentCard). 자체 상태 가능.
-- Templates: 레이아웃 정의. 데이터 없음, 구조만.
-- Pages: 실제 데이터 주입. API 호출은 여기서만.
-- 서버 컴포넌트 기본. 'use client'는 인터랙션이 필요한 최하위 컴포넌트에만 적용.
+## 디렉터리 구성
+- App.tsx, main.tsx, index.css
+- components/: LoginPage, Sidebar, AgentChatView, AgentCreateModal, AgentEditModal, ChatInput, ChatMessageView, MessageMeta, DocsModal, RoomDiscussView, RoomCreateModal
+- components/room/: room-runtime-store, room-state, room-typewriter, parse-room-command, room-topic-api
+- lib/: api.ts(HTTP 클라이언트), types.ts(공유 타입), storage.ts(토큰), room-sse.ts(룸 SSE), markdown-typewriter.ts
 
-## 성능 목표 (Core Web Vitals)
-- FCP (First Contentful Paint): < 1.5s
-- LCP (Largest Contentful Paint): < 2.5s
-- CLS (Cumulative Layout Shift): < 0.1
-- INP (Interaction to Next Paint): < 200ms
-- Lighthouse 점수: Performance 80+, Accessibility 90+
-- 초기 JS 번들: < 200KB (gzip)
+## API 클라이언트 (lib/api.ts)
+- BASE = '/api' (Vite dev proxy로 백엔드 연결)
+- authHeaders(): localStorage 토큰을 Authorization: Bearer 로 부착, Content-Type application/json.
+- apiFetch<T>(path, {method, body}): JSON 요청. 204면 undefined. 에러는 ApiError(status, message).
+- apiUpload<T>(path, formData): multipart 업로드(문서 적재).
+- apiStream(path, body, signal): SSE용 fetch Response 반환(POST + Bearer).
+- 401 응답 시 handleError가 clearAuth() 후 window.location.reload() → 자동 재로그인 유도.
 
-## 접근성 체크리스트 (WCAG 2.1 AA)
-- 모든 인터랙티브 요소에 키보드 접근 가능 (Tab 순서 논리적)
-- 포커스 인디케이터 명확 표시 (outline: 2px solid)
-- 색상 대비 4.5:1 이상 (일반 텍스트), 3:1 이상 (대형 텍스트)
-- 이미지: alt 텍스트 필수. 장식용 이미지는 alt=""
-- ARIA: 의미 있는 role, aria-label 사용. 남용 금지.
-- 오류 메시지: 색상만으로 구분하지 않고 텍스트로도 표시
+## 공유 타입 (lib/types.ts)
+- User, Workspace, Agent(id,name,instructions,model,description?,workspaceId)
+- Document(id, filename, status: processing|ready|failed, chunkCount, error?, stage?)
+- AgentMemory(id, agentId, content, sourceTopicId, createdAt)
+- Room, RoomTopic(status: open|running|completed|failed, finalText?, completedAt?, createdAt)
+- RoomTopicMessage(role: user|agent|moderator, agentId?, agentName?, round?, content)
+- RoomAgentSpec(id, name, model)
+- ToolCall(name, args), SourceHit(filename, score)
+- ChatMessage(role: user|assistant, content, toolCalls?, sources?, pending?)
+- RoomTurn(agentId, agentName, round, role, content, toolCalls?, sources?, done)
+
+## SSE 스트리밍 소비 (UI 핵심)
+- 단일 질의(AgentChatView): apiStream으로 /agents/:id/query 응답을 받아 text 토큰을 누적, tool_call·source 메타를 ChatMessage에 부착.
+- 룸 토론(RoomDiscussView): lib/room-sse.ts가 /rooms/:id/discuss(또는 topics/:id/discuss) SSE를 파싱해 RoomTurn 단위로 누적.
+- 타이핑 효과: markdown-typewriter / room-typewriter가 토큰을 점진 렌더링. 완료 시 done=true.
+- 이벤트 종류: 발언 텍스트, 진행 상태, 도구 호출(rag_search), 참고 지식(source: filename+score), 최종 결론.
+- 중단 처리: AbortSignal로 진행 중 스트림 취소(화면 이탈·재요청 시).
+
+## 상태 관리 (Zustand)
+- room/room-runtime-store: 진행 중 토론의 라운드별 턴·상태를 런타임 보관.
+- room/room-state: 룸/토픽 선택, 메시지 목록 등 화면 상태.
+- 서버 상태 캐시 라이브러리 없음 → 필요 시 명시적 재요청. staleness는 수동 관리.
+
+## 컴포넌트 책임
+- LoginPage: 이메일 입력 → dev-login → 토큰 저장.
+- Sidebar: 워크스페이스/에이전트/룸 네비게이션.
+- AgentChatView + ChatInput + ChatMessageView + MessageMeta: 단일 에이전트 질의/응답, 도구·소스 메타 표시.
+- AgentCreateModal / AgentEditModal: 에이전트 이름·지침·모델·설명 편집.
+- DocsModal: 에이전트 지식 문서 적재/상태(processing/ready/failed) 표시.
+- RoomDiscussView + RoomCreateModal: 룸 구성, topic 던지기, 다중 에이전트 토론 스트림 렌더링.
 
 ## 코드 컨벤션
-- 파일명: kebab-case (chat-message.tsx)
-- 컴포넌트명: PascalCase (ChatMessage)
-- CSS 클래스: Tailwind 유틸리티만 사용. 커스텀 CSS 파일 신규 생성 금지.
-- Context: 테마, 인증 정보처럼 트리 전체 필요한 경우만 사용`,
+- 파일명 kebab-case, 컴포넌트명 PascalCase.
+- Tailwind 유틸리티 우선, 커스텀 CSS 신설 최소화.
+- 모든 네트워크 호출은 lib/api.ts를 경유(직접 fetch 분산 금지).
+- 주석은 작성하지 않는다(프로젝트 규약).`,
   },
   {
-    agentName: "모바일 엔지니어",
-    filename: "mobile-engineer-agent.md",
-    content: `# 모바일 앱 개발 표준
+    agentName: "agent-discuss-QA",
+    filename: "agent-discuss-qa.md",
+    content: `# agent-discuss 품질 전략 — QA
 
-## 기술 스택
-- Framework: React Native 0.74 (New Architecture 적용)
-- 언어: TypeScript 5
-- 네비게이션: React Navigation 7 (Stack + Tab)
-- 상태 관리: Zustand (웹과 동일 라이브러리)
-- HTTP: Axios + React Query (웹과 동일 쿼리 훅 공유)
-- 빌드: Expo EAS Build (iOS/Android 동시 빌드)
-- 배포: Expo EAS Update (OTA 업데이트 — 심사 없이 JS 레이어 수정 즉시 배포)
+## 테스트 구성 (실제 자산)
+- 단위: Jest + @swc/jest. testRegex src/**/*.spec.ts. 비즈니스 로직·오케스트레이터 노드 검증.
+- e2e: supertest, test/jest-e2e.json. 전체 플로우 + 워크스페이스 멤버십 스코프 검증.
+- 실행: npm run test(단위), npm run test:e2e(e2e), npm run lint(tsc --noEmit), npm run build(SWC + 타입체크).
 
-## 플랫폼별 주의사항
-iOS:
-- 앱스토어 심사 최소 2~3일 소요. 긴급 수정은 OTA(EAS Update) 활용.
-- 주요 거부 사유: 결제 우회(외부 링크 결제 유도), 불완전한 기능, 개인정보 정책 누락
-- Info.plist: 사용 권한(카메라, 알림, 사진) 목적 문구 명시 필수
-- 배포: TestFlight 베타 → App Store 심사 제출
+## 핵심 회귀 자산 (오케스트레이터 spec)
+agent-rooms/application/discussion 하위 spec 들이 토론 품질의 안전망이다:
+- speaker-selector.service.spec / speaker.spec — 다음 발언자 선택·hand-off 수용 규칙
+- routing.service.spec — 발언자 라우팅, 교착 시 디렉터 개입
+- convergence-policy.spec — 토론 수렴/종료 판정
+- turn.service.spec — 한 턴 발언 생성, 라운드 증가, 도구 호출
+- conclusion-writer.service.spec — 최종 결론 종합
+- discussion.service.spec / discussion-state.spec / discussion-progress.spec — 전체 상태 전이·진행 이벤트
+- topic-setup.spec / moderator.spec / parsers.spec / substantive.spec — 토픽 검증·진행자·파싱·실질 발언 판정
 
-Android:
-- Play Store 심사 1~2일. 첫 앱 등록은 최대 7일.
-- targetSdkVersion: 최신 API 레벨 유지 (Google 정책 강제, 미준수 시 배포 차단)
-- 주요 거부 사유: 위험 권한 남용, 개인정보보호 라벨 불일치
-- 배포: Internal Test → Closed Test → Production (순차 롤아웃 20%→50%→100%)
+## 릴리즈 게이트 (Go/No-Go)
+- lint(tsc --noEmit) 통과 (타입 에러 0)
+- build(SWC) 성공
+- 단위 테스트 100% 통과
+- e2e 핵심 플로우 100% 통과 (로그인→워크스페이스→에이전트→질의→룸 토론)
+- 멤버십 스코프 e2e 통과 (비멤버가 :wsId/:agentId/:roomId 접근 시 차단 확인)
+- P0 버그 0건, P1 2건 이하
 
-## 푸시 알림 전략
-- iOS: UNUserNotificationCenter. 권한 요청 시점: 첫 실행 후 3일 뒤 기능 연계 맥락에서 요청.
-- Android 13+: 런타임 권한(POST_NOTIFICATIONS) 필수
-- 알림 카테고리: 채팅 답장, 토론 완료, 공지사항
-- 딥링크: 알림 탭 → 해당 채팅/토론 화면 직접 이동
-- 옵트아웃 존중: 알림 거부 사용자 대상 인앱 배지로 대체
+## 버그 심각도
+- P0(Critical): 핵심 플로우 중단, 토론 무한 루프/미종료, 데이터 유실, 멤버십 격리 붕괴 → 즉시 수정.
+- P1(High): 단일 질의/룸 토론 일부 동작 불가, SSE 스트림 중단, rag_search 미바인딩 → 당일 수정.
+- P2(Medium): 특정 입력에서 발언 누락, 소스 메타 오표시, UI 깨짐 → 이번 사이클 내.
+- P3(Low): 타이핑 렌더 미세 이슈, 오탈자, 로그 노이즈 → 백로그.
 
-## 앱 크래시 대응 절차
-1. Sentry로 크래시 자동 수집 (symbolication 적용)
-2. 크래시율 > 1%: 즉시 핫픽스 대응 (OTA 또는 긴급 심사)
-3. 크래시율 0.1~1%: 다음 스프린트 P1 처리
-4. 신규 빌드 배포 후 24시간: 크래시율 집중 모니터링
+## 핵심 검증 시나리오 (Happy Path)
+1. dev-login으로 JWT 발급 → 보호 라우트 접근 가능 확인.
+2. 에이전트 생성 + 문서 적재 → status processing→ready 전이 확인.
+3. 단일 질의 → rag_search 도구 호출 + source 이벤트 + text 스트림 수신 확인.
+4. 룸 생성 + 2명 이상 에이전트 → topic 던지기 → 다중 발언 + 최종 결론(finalText) 생성 확인.
+5. topic 이어가기(POST .../discuss) → 기존 컨텍스트 유지하며 토론 연장 확인.
 
-## React Native 코드 컨벤션
-- 네이티브 브릿지 신규 추가 시 팀 리뷰 필수 (유지보수 비용 증가)
-- 웹과 공유 가능한 로직은 shared/ 패키지로 분리 (모노레포)
-- 플랫폼별 분기: Platform.select() 사용. .ios.tsx / .android.tsx 파일 분리 최소화.
-- 성능: FlatList 기본 사용. ScrollView에 대량 아이템 렌더링 금지.`,
-  },
-  {
-    agentName: "QA 엔지니어",
-    filename: "qa-engineer-agent.md",
-    content: `# QA 프로세스 및 품질 기준
+## 엣지 케이스 (적극 발굴)
+- 빈/모호한 토픽: validateTopic이 토론 불가로 처리하는가.
+- 교착(hand-off 실패·지목 없음): 디렉터(moderator)가 개입해 진행을 이어가는가.
+- 턴 상한: 참가자 수 × 3, 최소 3턴. 상한 도달 시 결론 작성으로 전이하는가(무한 루프 없음).
+- 단일 참가자 룸: 최소 3턴 규칙과 발언자 선택이 깨지지 않는가.
+- SSE 중단: 클라이언트 abort 후 서버 리소스/상태 정리, 재요청 시 일관성.
+- 멤버십: 타 워크스페이스 사용자가 룸/에이전트/문서에 접근 시 가드 차단.
+- 문서 처리 실패: status failed + error 메시지 노출, 검색 결과에서 제외.
+- 임베딩 provider 차이: local(해시) vs openai 검색 품질·차원(EMBEDDING_DIM) 정합성.
+- 영속성: 토론 중단 후 재개 시 LangGraph 체크포인트(runState) 복원 일관성.
 
-## 테스트 피라미드 전략
-- 단위 테스트 (70%): Jest / 비즈니스 로직, 유틸리티 함수 / 커버리지 80% 이상 필수
-- 통합 테스트 (20%): Supertest / API 엔드포인트, DB 연동 / 실제 DB 사용 (Mock 금지)
-- E2E 테스트 (10%): Playwright / 핵심 사용자 플로우 (로그인, 채팅, 결제) / 스테이징 환경
+## 비기능/회귀 관점
+- 토론 종료 보장: 어떤 입력에서도 writeResult로 수렴해야 한다(미종료 = P0).
+- 멱등/격리: 워크스페이스 단위 데이터 격리가 모든 신규 기능에서 유지되는가.
+- 성능 회귀: 룸 토론 턴 수 증가가 상한 공식을 벗어나지 않는지.
+- 비용 인식: 실제 LLM(openai) 사용 시 토론 1건당 토큰/호출 수를 가늠해 과도한 턴 상한을 경계.
 
-## 릴리즈 게이트 기준 (Go/No-Go)
-- P0 버그: 반드시 0건 (앱 크래시, 데이터 유실, 결제 오류)
-- P1 버그: 2건 이하 (핵심 기능 동작 불가)
-- 단위 테스트 통과율: 100%
-- E2E 핵심 시나리오 통과율: 100%
-- 성능 회귀: LCP 이전 대비 20% 이상 악화 시 배포 블로킹
-- 보안 스캔 (Snyk): Critical/High 취약점 0건
-
-## 버그 심각도 분류
-- P0 (Critical): 서비스 전체 중단, 데이터 유실, 결제 오류 → 즉시 수정 (2시간 내)
-- P1 (High): 핵심 기능 동작 불가, 보안 취약점 → 당일 수정 (8시간 내)
-- P2 (Medium): 주요 기능 부분 동작, UI 깨짐(메인 화면) → 이번 스프린트 내 수정
-- P3 (Low): 마이너 UI 이슈, 오탈자, 성능 미세 저하 → 백로그 등록 후 우선순위 판단
-
-## 버그 리포트 작성 양식
-- 제목: [P레벨][모듈] 현상 요약 (예: [P1][채팅] SSE 스트림 중 새로고침 시 빈 화면)
-- 환경: OS/버전, 브라우저/앱 버전, 재현 환경(로컬/스테이징/프로덕션)
-- 재현 단계: 번호 목록으로 단계별 기술
-- 기대 결과 vs 실제 결과
-- 첨부: 스크린샷 또는 화면 녹화 필수
-
-## QA 체크리스트 (주요 항목)
-기능 검증:
-- 정상 플로우 (Happy Path) 전부 통과
-- 경계값(최대 길이, 0, 음수, 특수문자 입력) 처리 확인
-- 권한 없는 사용자 접근 거부 확인
-
-비기능 검증:
-- 네트워크 끊김 상황 동작 (오프라인 모드)
-- 느린 네트워크(3G 시뮬레이션) 타임아웃 처리
-- 다크모드 UI 오류 여부
-- 모바일 앱 크래시율 1% 미만 확인
-
-## 배포 검증 절차
-
-### 배포 전 QA 최종 확인 (Go/No-Go 판단)
-- 릴리즈 게이트 기준 충족 여부 체크리스트 완료
-- 스테이징 환경 E2E 핵심 시나리오 최종 실행 결과 공유
-- DB 마이그레이션 스테이징 검증 완료 확인
-- 성능 회귀 없음 확인 (LCP 이전 대비 20% 이내)
-- 롤백 플랜 문서 링크 공유 여부
-
-### 현재 v2.1.0 QA 상태
-- P0: 0건 (통과)
-- P1: 1건 미해결 — [BUG-412] 500MB 이상 PDF 업로드 시 BullMQ Worker 타임아웃 (재현율 100%)
-- P2: 2건 — [BUG-418] 벡터 검색 중복 청크 반환 / [BUG-421] 다크모드 뱃지 색상 대비 미달
-- P3: 1건 — [BUG-425] 진행률 소수점 표기 오류
-- 단위 테스트 통과율: 100%
-- E2E 시나리오 통과율: 94% (64건 중 6건 실패, 전부 500MB 이상 파일 케이스)
-- 릴리즈 게이트 판정: ❌ P1 1건 미해결, E2E 100% 미달 → No-Go
-
-### 배포 후 스모크 테스트 (15분 이내 완료)
-1. 로그인/로그아웃 정상 동작 확인
-2. 채팅 메시지 전송 정상 동작
-3. 문서 업로드 (10MB 이하 PDF) 정상 처리 확인
-4. 벡터 검색 결과 반환 확인
-5. Sentry 에러율 1% 미만 확인
-6. Datadog P95 응답시간 200ms 이하 확인
-
-### 핫픽스 릴리즈 게이트 (긴급 배포 완화 기준)
-- P0 핫픽스: P0 수정 확인 + 스모크 테스트만으로 배포 가능 (PM 서면 승인 필수)
-- P1 핫픽스: 회귀 테스트 핵심 영역 + 스모크 테스트
-- 완화 기준은 핫픽스에만 적용 — 일반 릴리즈에 적용 불가
-
-### Go/No-Go 기준 요약표
-| 항목 | Go 기준 | v2.1.0 현황 |
-|------|---------|------------|
-| P0 버그 | 0건 | ✅ 0건 |
-| P1 버그 | 2건 이하 | ❌ 1건 미해결 |
-| 단위 테스트 | 100% 통과 | ✅ 100% |
-| E2E 핵심 시나리오 | 100% 통과 | ❌ 94% (6건 실패) |
-| 성능 회귀 | LCP 20% 이내 | ✅ 이상 없음 |
-| 보안 스캔 | Critical/High 0건 | ✅ 이상 없음 |`,
-  },
-  {
-    agentName: "인사팀 담당자",
-    filename: "hr-agent.md",
-    content: `# 인사 관리 정책 및 가이드
-
-## 채용 프로세스
-단계: 서류 검토(3일) → 코딩 테스트(4일) → 1차 기술 면접 → 2차 컬처핏 면접(팀장+HR) → 처우 협의 → 합격 통보
-- 서류 검토 기준: 직무 경험 50%, 기술 역량 30%, 자기소개서 20%
-- 코딩 테스트: 프로그래머스 (90분, 알고리즘 2문제 + 시스템 설계 1문제)
-- 기술 면접: 직무 담당 엔지니어 2인 진행, 코드 리뷰 포함
-- 컬처핏 면접: HR + 팀장 / 조직 적합성, 성장 의지, 협업 방식 평가
-- 처우 협의: HR 주도, 기준 급여 밴드 내 협의 (밴드 초과 시 CPO 승인 필요)
-- 채용 SLA: 서류 접수 후 최종 합격까지 3주 이내 목표
-
-## 온보딩 플랜 (30/60/90일)
-30일차 목표: 조직 이해 + 환경 세팅 완료
-- 1주차: 전사 오리엔테이션, 팀 소개, 장비 수령, 계정 셋업
-- 2~3주차: 코드베이스 분석, 기존 티켓 클로징 1건 이상
-- 30일 체크인: 온보딩 만족도 조사 + HR 1:1 면담
-
-60일차 목표: 독립적 업무 수행 가능
-90일차 목표: 팀 기여 시작 + 수습 평가 (S/A/B/C 4단계, B 이상 정규직 전환)
-
-## 성과 평가 제도
-- 평가 주기: 연 2회 (6월 말, 12월 말)
-- 평가 등급: S(탁월, 상위 10%), A(우수, 상위 30%), B(기대 충족, 60%), C(개선 필요, 10%)
-- 평가 항목: 목표 달성도(KPI) 40%, 역량(기술/협업) 40%, 성장 기여도 20%
-- 승급/승진: A 이상 2회 연속 시 승급 심사 대상
-- PIP(성과개선계획): C 등급 시 3개월 PIP, 미개선 시 계약 검토
-
-## 주요 복리후생
-- 연차: 입사 1년차 11일, 이후 매년 1일 추가 (최대 25일)
-- 경조사 휴가: 결혼 5일, 부모 상 5일, 배우자 상 5일, 자녀 상 3일
-- 건강검진: 연 1회 전액 지원 (40세 이상 종합검진 지원)
-- 자기계발: 도서 구입비 월 3만원, 외부 교육비 연 50만원
-- 재택근무: 주 2회 허용 (팀 협의 후 지정일)
-- 헤드카운트 계획: 분기별 인력 수요 조사 후 연간 채용 계획 수립`,
-  },
-  {
-    agentName: "총무팀 담당자",
-    filename: "general-affairs-agent.md",
-    content: `# 총무 행정 가이드
-
-## 비품 및 물품 구매 절차
-- 50만원 미만: 팀장 결재 → 총무팀 발주 → 수령 확인
-- 50만원 이상 ~ 200만원 미만: 이사급 결재 → 총무팀 발주
-- 200만원 이상: 대표 결재 → 3개 업체 견적 비교 필수 → 발주
-- 긴급 구매: 사전 구두 승인 후 사후 결재 가능 (50만원 이하만)
-- 비품 요청 방법: 사내 포털 > 총무 요청 > 비품 구매 신청서 작성
-- 처리 기간: 결재 완료 후 5영업일 이내 납품
-
-## 노트북 및 장비 관리 정책
-- 지급 기준: 입사 시 개인 노트북 1대 지급 (MacBook Pro 14" 기본)
-- 교체 주기: 3년 (성능 불량 시 2년 이내 조기 교체 가능)
-- 분실/파손: 고의·과실 시 수리비 본인 부담 (분실 시 50% 부담)
-- 퇴직 시: 반납 필수. 반납 전 데이터 초기화 본인 책임.
-- 추가 모니터: 신청 후 총무팀 재고 확인 (기본 27" 모니터 1대 추가 지원)
-
-## 외부 벤더 계약 관리
-- 신규 계약: 총무팀 주도, 법무 검토 필수 (계약금액 1,000만원 이상)
-- 갱신 관리: 만료 2개월 전 담당팀에 갱신 여부 확인 요청
-- 등록 벤더: 사무용품(A), 인테리어(B), 케이터링(C), IT 장비(D), 청소용역(E)
-- 벤더 평가: 반기 1회 서비스 만족도 평가 후 갱신 여부 결정
-
-## 복지 프로그램
-- 건강검진: 연 1회 (인사팀 협업), 독감 예방접종 전액 지원
-- 동호회: 지원금 월 10만원 (5인 이상, 총무팀 등록 필수)
-- 간식: 층별 격주 보충, 생일자 케이크 제공
-- 사무환경: 냉난방 신청 접수 (사내 포털), 좌식 책상 전환 신청 가능
-- 기념일: 입사 1/3/5주년 기념품 지급
-
-## 사내 시설 이용 안내
-- 회의실 예약: 사내 캘린더 > 회의실 예약 (최대 4시간)
-- 주차: 선착순 월 주차권 신청 (총무팀 > 주차 신청)
-- 택배: 층별 무인 택배함. 업무 관련 택배 수령 시 총무팀 사전 공지 필수.`,
-  },
-  {
-    agentName: "회계팀 담당자",
-    filename: "accounting-agent.md",
-    content: `# 재무 및 경비 처리 정책
-
-## 경비 청구 절차
-1. 지출 발생 → 영수증/세금계산서 수취 (발행일로부터 15일 이내 제출)
-2. ERP 시스템 > 경비정산 메뉴 > 지출 항목 입력 + 증빙서류 첨부
-3. 팀장 온라인 승인 (2영업일 이내)
-4. 회계팀 검토 및 최종 승인 (3영업일 이내)
-5. 지급: 매월 10일 (전월 16일~말일 청구건) / 매월 25일 (당월 1일~15일 청구건)
-
-증빙서류 기준:
-- 3만원 이하: 간이영수증 가능
-- 3만원 초과: 세금계산서 또는 신용카드 매출전표 필수
-- 법인카드 사용 권장 (법인카드 미보유 팀은 개인카드 후 청구)
-
-## 예산 관리 원칙
-- 연간 예산: 11월 요청 → 12월 이사회 확정 → 1월 배정
-- 부서별 예산 집행 현황: ERP > 예산 관리 메뉴에서 실시간 조회 가능
-- 예산 초과 집행: 팀장 + CFO 사전 승인 필수. 사후 보고 불인정.
-- 예산 이월: 원칙적 불가. 불가피 시 12월 15일까지 CFO 신청.
-- 비용 절감 목표: 전년 대비 관리비 5% 절감 (달성 시 부서 인센티브)
-
-## 월말 결산 마감 일정
-- 영업일 1~3일: 전월 경비 마감 (이후 추가 접수 불가)
-- 영업일 3~5일: 부서별 예산 대비 실적 검토
-- 영업일 7일: 내부 월간 재무보고서 완성 (CEO/CFO 보고)
-- 10일: 경비 지급 (1차) / 25일: 경비 지급 (2차)
-
-## 법인카드 사용 정책
-- 발급 대상: 팀장 이상 또는 총무팀 협의 후 업무 필요자
-- 사용 가능: 업무 관련 식대, 교통비, 소모품, 복지비
-- 사용 불가: 개인 물품, 유흥비, 가족 동반 식비 전체, 현금서비스
-- 한도: 직급별 월 50~200만원 (CFO 승인 시 한시적 상향 가능)
-- 영수증 등록: 사용 후 3영업일 이내 ERP 입력 필수 (미입력 시 다음 달 사용 정지)
-
-## 세무 신고 일정
-- 부가세: 1기(1~6월) 7월 25일 / 2기(7~12월) 다음해 1월 25일
-- 원천세: 매월 10일 (급여 원천세, 사업소득 원천세)
-- 법인세: 사업연도 종료 후 3개월 내 (12월 결산법인 → 3월 31일)
-- 세금계산서 수취: 공급일로부터 익월 10일 이내 발행분만 매입세액 공제 가능`,
-  },
-  {
-    agentName: "마케팅 담당자",
-    filename: "marketing-agent.md",
-    content: `# B2B SaaS 마케팅 전략 및 운영 가이드
-
-## 핵심 마케팅 지표 (KPI)
-- MQL(Marketing Qualified Lead): 월 150건 목표 (인바운드 콘텐츠 + 유료 광고)
-- SQL(Sales Qualified Lead): MQL → SQL 전환율 30% 목표
-- CAC(고객 획득 비용): 목표 120만원 이하 (현재 분기 평균 145만원 — 개선 필요)
-- LTV(고객 생애 가치): 평균 계약 기간 24개월, 월 ARR 기준 LTV:CAC = 4:1 목표
-- 기능 채택률: 신기능 출시 2주 내 MAU 25% 이상 사용
-- 이메일 오픈율: 뉴스레터 평균 32% (B2B SaaS 업계 평균 22% 대비 우수)
-
-## 제품 출시 캠페인 프로세스 (Go-to-Market)
-
-### 출시 캠페인 타임라인 (기능 배포 기준)
-- D-7: 내부 공지 (팀 전체) + 영업팀 배틀카드 배포
-- D-3: 랜딩 페이지 업데이트 (신기능 소개 섹션)
-- D-1: 배포 전 마케팅 자료 최종 검토 (블로그 초안, 이메일 템플릿)
-- D-day 배포 완료 후 2시간 내: 고객 뉴스레터 발송
-- D+1: 블로그 포스트 발행 + LinkedIn/X 소셜 미디어 게시
-- D+3: SDR 아웃바운드 시퀀스 시작 (신기능 기반 콜드 이메일)
-- D+7: 기능 채택률 첫 주 리포트 작성 (PM과 공유)
-
-### 고객 커뮤니케이션 정책
-- 유지보수 공지: 서비스 영향 있는 배포 24시간 전 이메일 발송 (SLA 준수)
-- 긴급 장애 공지: 15분 이내 상태 페이지(status.agent-discuss.io) 업데이트 → 30분 내 고객 이메일
-- 기능 출시 공지: 엔터프라이즈 고객은 개별 CS 채널(Slack Connect)로 사전 안내
-- 공지 철회: 발송 완료된 이메일은 취소 불가 — 후속 정정 이메일 발송 필요 (오픈율 하락 및 구독 취소 리스크)
-
-## 현재 v2.1.0 마케팅 계획
-- 배포 예정: 2026-06-25(목) 02:00
-- 뉴스레터 예약 발송: 2026-06-25(목) 09:00 (수신자 1,240명 — 전체 고객 + 트라이얼 사용자)
-  - 제목: "RAG 문서 업로드 v2 출시 — 대용량 문서도 비동기로 빠르게"
-  - 예약 완료 상태: 배포 취소 시 발송 4시간 전까지 철회 가능 (마감: 25일 05:00)
-- 블로그 포스트: 2026-06-25(목) 10:00 발행 예정 (초안 작성 완료)
-- LinkedIn 캠페인: 2026-06-25(목) 11:00 게시 예정 (광고 소재 심사 완료)
-- 예상 마케팅 임팩트: 뉴스레터 → 트라이얼 전환 목표 15건, MQL 30건 추가 예상
-
-## 배포 지연 시 마케팅 리스크
-- 뉴스레터 발송 후 배포 취소: 기능을 써보려는 고객이 오류를 경험 → CS 인입 급증, 브랜드 신뢰 손상
-- 공지 없이 기능 미출시: 고객 혼선 → 구독 취소율 상승 (과거 사례: 공지 후 배포 취소 시 해당 주 구독 취소 2.3배 증가)
-- 캠페인 연기 비용: 유료 광고(LinkedIn) 게재 일정 변경 시 약 40만원 손실`,
-  },
-  {
-    agentName: "영업 담당자",
-    filename: "sales-agent.md",
-    content: `# B2B 영업 프로세스 및 고객 관리 가이드
-
-## 핵심 영업 지표 (KPI)
-- ARR(연간 반복 매출): 현재 3.2억원, 분기 목표 4억원
-- Churn Rate: 월 1.2% (목표 1% 이하) — RAG 기능 출시로 개선 기대
-- NRR(순 매출 유지율): 108% (확장 매출이 이탈 매출 상회)
-- 파이프라인 규모: 현재 오픈 딜 23건, 예상 ARR 총 8,400만원
-- 평균 딜 사이클: SMB 21일, 엔터프라이즈 67일
-- 계약 갱신율: 87% (목표 90%)
-
-## 영업 프로세스 (SDR → AE → CS)
-- SDR(Sales Development Rep): 아웃바운드 콜드 이메일 + 인바운드 MQL 자격 검증 → SQL 전달
-- AE(Account Executive): 데모 → 제안 → 협상 → 계약 클로징
-- CS(Customer Success): 온보딩 → 분기별 QBR(Quarterly Business Review) → 갱신/확장
-- 계약 형태: 연간 선불 SaaS 구독 (월간 구독은 20% 할증)
-
-## 현재 주요 파이프라인 딜
-- 엔터프라이즈 A사 (제조업, 직원 800명):
-  - 예상 ARR 3,600만원 (전체 파이프라인의 43%)
-  - 계약 단계: POC 완료 → 최종 제안서 검토 중
-  - 핵심 요구사항: RAG 문서 검색 기능 (내부 지식베이스 구축 목적)
-  - **2026-06-26(금) 14:00: 경영진 최종 데모 약속 확정** — RAG 업로드 기능 시연 필수
-  - 배포 지연 시: 데모 취소 또는 미완성 기능 시연 → 계약 클로징 3~4주 지연 예상
-- B사 (IT 서비스, 직원 200명): 예상 ARR 480만원, 갱신 협상 중 (만료: 2026-07-01)
-- C사 (스타트업, 직원 50명): 예상 ARR 180만원, 트라이얼 종료 후 전환 협상 중
-
-## 고객 SLA 약정 현황
-- 엔터프라이즈 계약 SLA: 가동률 99.5% (월간 다운타임 최대 3.6시간), 위반 시 크레딧 환급
-- P0 장애 대응: 15분 내 초기 응답, 4시간 내 해결 (위반 시 1일치 요금 환급)
-- 데이터 보존: 계약 해지 후 30일 내 내보내기 보장
-- 현재 SLA 준수율: 99.8% (목표 초과 달성)
-
-## 배포 관련 영업 체크포인트
-- 배포 전: 해당 월 갱신 예정 고객 목록 확인 → 배포 영향도 사전 안내
-- 신기능 배포 후: 48시간 내 파이프라인 딜 고객에게 개별 연락 (기능 소개 + 데모 요청)
-- 배포 실패/롤백 시: 엔터프라이즈 고객 CS 채널 즉시 공지 → AE가 직접 전화 확인
-- 계약 협상 중 고객: 배포 일정 변경 시 AE에게 사전 공유 필수 (딜 클로징 타이밍 영향)
-
-## 계약 갱신 시즌 캘린더 (2026)
-- 6월: 3건 갱신 예정 (B사 포함) — 이 달 ARR 기여 비중 높음
-- 7월: 5건 갱신 예정
-- 9월: 8건 갱신 예정 (최대 갱신 시즌)`,
+## Go/No-Go 판단 원칙
+- 검증 가능성 우선: 재현 절차가 없는 주장은 게이트 근거로 채택하지 않는다.
+- PoC라도 "핵심 5단계 플로우 완주 + 토론 종료 보장"은 타협 불가 기준으로 본다.`,
   },
 ];
