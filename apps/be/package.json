@@ -19,6 +19,7 @@
     "@langchain/anthropic": "^1.4.1",
     "@langchain/core": "^1.1.49",
     "@langchain/langgraph": "^1.4.2",
+    "@langchain/langgraph-checkpoint-postgres": "^1.0.4",
     "@langchain/openai": "^1.4.7",
     "@langchain/textsplitters": "^1.0.1",
     "@mikro-orm/core": "^7.1.5",
@@ -58,7 +59,12 @@
     "node": ">=22"
   },
   "jest": {
-    "moduleFileExtensions": ["js", "mjs", "json", "ts"],
+    "moduleFileExtensions": [
+      "js",
+      "mjs",
+      "json",
+      "ts"
+    ],
     "rootDir": ".",
     "testEnvironment": "node",
     "testRegex": "src/.*\\.spec\\.ts$",
