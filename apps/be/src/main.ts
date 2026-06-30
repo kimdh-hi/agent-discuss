@@ -9,7 +9,7 @@ import { AppModule } from './app.module';
 import { AllExceptionsFilter } from './common/all-exceptions.filter';
 
 async function bootstrap() {
-  const dbPath = process.env.DATABASE_PATH || './data/rai-agent.sqlite';
+  const dbPath = process.env.DATABASE_PATH || './data/agent-discuss.sqlite';
   if (dbPath !== ':memory:') {
     const dir = dirname(dbPath);
     if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
@@ -42,7 +42,7 @@ async function bootstrap() {
 
   const port = Number(process.env.PORT || 3000);
   await app.listen(port);
-  logger.log(`rai-agent listening on http://localhost:${port}`);
+  logger.log(`agent-discuss listening on http://localhost:${port}`);
 }
 
 void bootstrap();

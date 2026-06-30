@@ -1,5 +1,5 @@
-const TOKEN_KEY = 'rai.token';
-const USER_KEY = 'rai.user';
+const TOKEN_KEY = 'agent-discuss.token';
+const USER_KEY = 'agent-discuss.user';
 
 export function getToken(): string | null {
   return localStorage.getItem(TOKEN_KEY);

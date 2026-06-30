@@ -2,7 +2,7 @@ import { defineConfig } from '@mikro-orm/sqlite';
 import { ALL_ENTITIES } from '../entities';
 
 export function buildOrmConfig() {
-  const dbPath = process.env.DATABASE_PATH || './data/rai-agent.sqlite';
+  const dbPath = process.env.DATABASE_PATH || './data/agent-discuss.sqlite';
   return defineConfig({
     dbName: dbPath,
     entities: ALL_ENTITIES,

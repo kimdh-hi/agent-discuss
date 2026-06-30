@@ -2,7 +2,7 @@
   "name": "agent-discuss",
   "version": "0.1.0",
   "private": true,
-  "description": "RAI Agent - 워크스페이스 기반 멀티 에이전트 PoC (NestJS + LangChain.js)",
+  "description": "agent-discuss - 워크스페이스 기반 멀티 에이전트 PoC (NestJS + LangChain.js)",
   "workspaces": [
     "apps/be",
     "apps/fe"

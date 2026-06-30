@@ -10,7 +10,7 @@ import request from 'supertest';
 import { AppModule } from '../src/app.module';
 import { AllExceptionsFilter } from '../src/common/all-exceptions.filter';
 
-describe('rai-agent (e2e)', () => {
+describe('agent-discuss (e2e)', () => {
   let app: INestApplication;
   let server: any;
 

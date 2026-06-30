@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { join } from 'path';
 
 const envSchema = z.object({
-  RAG_DATABASE_URL: z.string().default('postgresql://rai:rai@localhost:5432/rai_rag'),
+  RAG_DATABASE_URL: z.string().default('postgresql://agent_discuss:agent_discuss@localhost:5432/agent_discuss_rag'),
   RAG_STORAGE_DIR: z.string().default(''),
   RAG_TOP_K: z.coerce.number().default(5),
 

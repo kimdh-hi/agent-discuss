@@ -3,7 +3,7 @@ import { RAG_ENTITIES } from '../entities';
 
 export function buildRagOrmConfig() {
   const clientUrl =
-    process.env.RAG_DATABASE_URL || 'postgresql://rai:rai@localhost:5432/rai_rag';
+    process.env.RAG_DATABASE_URL || 'postgresql://agent_discuss:agent_discuss@localhost:5432/agent_discuss_rag';
   return defineConfig({
     name: 'rag',
     clientUrl,

@@ -1,18 +1,18 @@
 services:
   rag-postgres:
     image: pgvector/pgvector:pg17
-    container_name: rai-agent-rag-postgres
+    container_name: agent-discuss-rag-postgres
     environment:
-      POSTGRES_USER: rai
-      POSTGRES_PASSWORD: rai
-      POSTGRES_DB: rai_rag
+      POSTGRES_USER: agent_discuss
+      POSTGRES_PASSWORD: agent_discuss
+      POSTGRES_DB: agent_discuss_rag
     ports:
       - "5432:5432"
     volumes:
       - ragpgdata:/var/lib/postgresql/data
       - ./infra/postgres/rag-init.sql:/docker-entrypoint-initdb.d/rag-init.sql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U rai -d rai_rag"]
+      test: ["CMD-SHELL", "pg_isready -U agent_discuss -d agent_discuss_rag"]
       interval: 5s
       timeout: 3s
       retries: 10

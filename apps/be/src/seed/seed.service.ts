@@ -213,7 +213,7 @@ const AGENT_KNOWLEDGE: Record<string, string> = {
 ## 배포 절차 및 인프라 운영
 
 ### 배포 환경 및 파이프라인
-- 환경 순서: 로컬 → 스테이징(staging.rai.internal) → 프로덕션(rai.io)
+- 환경 순서: 로컬 → 스테이징(staging.agent-discuss.internal) → 프로덕션(agent-discuss.io)
 - 스테이징 배포: main 브랜치 머지 시 GitHub Actions 자동 배포
 - 프로덕션 배포: GitHub Actions workflow_dispatch 수동 트리거 (엔지니어 승인 필수)
 - 무중단 배포: Kubernetes Rolling Update (maxUnavailable: 0, maxSurge: 1)
@@ -249,7 +249,7 @@ const AGENT_KNOWLEDGE: Record<string, string> = {
 - 에러율: Sentry (임계값 1% → Slack #alerts 채널 알림)
 - API 응답시간: Datadog APM (P95 > 500ms → PagerDuty 알림)
 - 인프라: AWS CloudWatch (CPU > 70% → HPA 스케일 아웃)
-- 큐 상태: Bull Dashboard (내부망 admin.rai.internal/queues)`,
+- 큐 상태: Bull Dashboard (내부망 admin.agent-discuss.internal/queues)`,
 
   '프론트엔드 엔지니어': `# 프론트엔드 개발 가이드
 
@@ -510,7 +510,7 @@ Android:
 
 ### 고객 커뮤니케이션 정책
 - 유지보수 공지: 서비스 영향 있는 배포 24시간 전 이메일 발송 (SLA 준수)
-- 긴급 장애 공지: 15분 이내 상태 페이지(status.rai.io) 업데이트 → 30분 내 고객 이메일
+- 긴급 장애 공지: 15분 이내 상태 페이지(status.agent-discuss.io) 업데이트 → 30분 내 고객 이메일
 - 기능 출시 공지: 엔터프라이즈 고객은 개별 CS 채널(Slack Connect)로 사전 안내
 - 공지 철회: 발송 완료된 이메일은 취소 불가 — 후속 정정 이메일 발송 필요 (오픈율 하락 및 구독 취소 리스크)
 

@@ -12,7 +12,7 @@ import { WorkspaceMemberGuard } from './workspace-member.guard';
   imports: [
     JwtModule.register({
       global: true,
-      secret: process.env.JWT_SECRET || 'rai-agent-dev-secret-change-me',
+      secret: process.env.JWT_SECRET || 'agent-discuss-dev-secret-change-me',
       signOptions: { expiresIn: (process.env.JWT_EXPIRES_IN || '7d') as `${number}d` },
     }),
     MikroOrmModule.forFeature([User, Agent, Room, WorkspaceMember]),
