@@ -1,18 +1,23 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { apiFetch, apiStreamGet, parseSse, ApiError } from '../lib/api';
-import type { Room, RoomAgentSpec, RoomTopic, RoomTopicMessage, RoomTurn, SourceHit } from '../lib/types';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { apiFetch } from '../lib/api';
+import type { Room, RoomAgentSpec, RoomTopic, RoomTopicMessage, SourceHit } from '../lib/types';
+import type { SearchHit } from '../lib/room-sse';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import MessageMeta from './MessageMeta';
+import {
+  pendingTopicKey,
+  type RoomSendContext,
+  useRoomRuntimeStore,
+} from './room/room-runtime-store';
+import { initialRoomState, toDisplayItems } from './room/room-state';
+import { useRoomTypewriterState } from './room/room-typewriter';
+import { cancelTopic } from './room/room-topic-api';
+import { matchRoomCommands, parseRoomCommand } from './room/parse-room-command';
 
 interface Props {
   room: Room;
 }
-
-type DisplayItem =
-  | { kind: 'user'; id: string; content: string }
-  | { kind: 'note'; id: string; text: string }
-  | ({ kind: 'turn'; id: string } & RoomTurn);
 
 const AGENT_COLORS = [
   'border-violet-500',
@@ -43,25 +48,9 @@ function formatTopicTime(value: string): string {
   }).format(new Date(value));
 }
 
-function toDisplayItems(messages: RoomTopicMessage[]): DisplayItem[] {
-  return messages.flatMap<DisplayItem>((message) => {
-    if (message.role === 'user') {
-      return [{ kind: 'user', id: message.id, content: message.content }];
-    }
-    if (message.role === 'agent') {
-      return [{
-        kind: 'turn',
-        id: message.id,
-        agentId: message.agentId ?? '',
-        agentName: message.agentName ?? '에이전트',
-        round: message.round ?? 0,
-        role: message.role,
-        content: message.content,
-        done: true,
-      }];
-    }
-    return [];
-  });
+function toSourceHits(hits?: SearchHit[]): SourceHit[] | undefined {
+  if (!hits) return undefined;
+  return hits.map((h) => ({ filename: h.filename, score: h.score }));
 }
 
 export default function RoomDiscussView({ room }: Props) {
@@ -69,15 +58,23 @@ export default function RoomDiscussView({ room }: Props) {
   const [topics, setTopics] = useState<RoomTopic[]>([]);
   const [selectedTopic, setSelectedTopic] = useState<RoomTopic | null>(null);
   const [input, setInput] = useState('');
-  const [items, setItems] = useState<DisplayItem[]>([]);
-  const [finalText, setFinalText] = useState<string | null>(null);
   const [loadingTopic, setLoadingTopic] = useState(false);
-  const [streaming, setStreaming] = useState(false);
-  const [status, setStatus] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const abortRef = useRef<(() => void) | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const agentColorMap = useRef<Map<string, string>>(new Map());
+
+  const activeKey = selectedTopic ? selectedTopic.id : pendingTopicKey(room.id);
+
+  const entry = useRoomRuntimeStore((s) => s.sessions[activeKey]);
+  const init = useRoomRuntimeStore((s) => s.init);
+  const hydrate = useRoomRuntimeStore((s) => s.hydrate);
+  const send = useRoomRuntimeStore((s) => s.send);
+  const discussNew = useRoomRuntimeStore((s) => s.discussNew);
+  const reconnect = useRoomRuntimeStore((s) => s.reconnect);
+  const stopStream = useRoomRuntimeStore((s) => s.stop);
+
+  const state = entry?.state ?? initialRoomState;
+  const { items, streaming, status, error } = state;
+  const { items: displayItems } = useRoomTypewriterState(items);
 
   const getColor = (agentId: string) => {
     if (!agentColorMap.current.has(agentId)) {
@@ -87,15 +84,35 @@ export default function RoomDiscussView({ room }: Props) {
     return agentColorMap.current.get(agentId)!;
   };
 
-  const scrollBottom = () => {
+  const scrollBottom = useCallback(() => {
     requestAnimationFrame(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }));
-  };
+  }, []);
 
   const refreshTopics = useCallback(async () => {
     const list = await apiFetch<RoomTopic[]>(`/rooms/${room.id}/topics`);
     setTopics(list);
     return list;
   }, [room.id]);
+
+  const markTopic = useCallback((topicId: string, patch: Partial<RoomTopic>) => {
+    setTopics((prev) => prev.map((topic) => (topic.id === topicId ? { ...topic, ...patch } : topic)));
+    setSelectedTopic((prev) => (prev?.id === topicId ? { ...prev, ...patch } : prev));
+  }, []);
+
+  const sendCtx = useMemo<RoomSendContext>(
+    () => ({
+      roomId: room.id,
+      onTopicCreated: (topic) => {
+        setSelectedTopic(topic);
+        setTopics((prev) => upsertTopic(prev, { ...topic, status: 'running' }));
+      },
+      onTopicStatus: (topicId, patch) => markTopic(topicId, patch),
+      onDone: () => {
+        void refreshTopics();
+      },
+    }),
+    [room.id, markTopic, refreshTopics],
+  );
 
   useEffect(() => {
     apiFetch<{ room: Room; agents: RoomAgentSpec[] }>(`/rooms/${room.id}`)
@@ -107,10 +124,7 @@ export default function RoomDiscussView({ room }: Props) {
     let cancelled = false;
     setTopics([]);
     setSelectedTopic(null);
-    setItems([]);
-    setFinalText(null);
     setInput('');
-    setError(null);
 
     apiFetch<RoomTopic[]>(`/rooms/${room.id}/topics`)
       .then((list) => {
@@ -127,220 +141,8 @@ export default function RoomDiscussView({ room }: Props) {
     };
   }, [room.id]);
 
-  const markTopic = useCallback((topicId: string, patch: Partial<RoomTopic>) => {
-    setTopics((prev) => prev.map((topic) => (topic.id === topicId ? { ...topic, ...patch } : topic)));
-    setSelectedTopic((prev) => (prev?.id === topicId ? { ...prev, ...patch } : prev));
-  }, []);
-
-  const consumeStream = useCallback(
-    async (res: Response, activeTopic: RoomTopic | null) => {
-      for await (const { event, data } of parseSse(res)) {
-        if (event === 'turn') {
-          if (data.phase === 'start') {
-            setItems((prev) => [
-              ...prev,
-              {
-                kind: 'turn',
-                id: `turn-${Date.now()}-${prev.length}`,
-                agentId: String(data.agentId ?? ''),
-                agentName: String(data.agentName ?? ''),
-                round: Number(data.round ?? 0),
-                role: String(data.role ?? ''),
-                content: '',
-                done: false,
-              },
-            ]);
-          } else if (data.phase === 'end') {
-            setItems((prev) =>
-              prev.map((item, i) =>
-                item.kind === 'turn' && i === prev.length - 1 && item.agentId === data.agentId
-                  ? { ...item, done: true }
-                  : item,
-              ),
-            );
-          }
-        } else if (event === 'content') {
-          setItems((prev) => {
-            let idx = -1;
-            for (let i = prev.length - 1; i >= 0; i--) {
-              const item = prev[i];
-              if (item.kind === 'turn' && item.agentId === data.agentId && !item.done) {
-                idx = i;
-                break;
-              }
-            }
-            if (idx === -1) return prev;
-            const updated = [...prev];
-            const item = updated[idx];
-            if (item.kind === 'turn') {
-              updated[idx] = { ...item, content: item.content + String(data.text ?? '') };
-            }
-            return updated;
-          });
-          scrollBottom();
-        } else if (event === 'tool') {
-          const name = String(data.name ?? '');
-          const args = (data.args as Record<string, unknown>) ?? {};
-          setItems((prev) => {
-            let idx = -1;
-            for (let i = prev.length - 1; i >= 0; i--) {
-              const item = prev[i];
-              if (item.kind === 'turn' && item.agentId === data.agentId && !item.done) {
-                idx = i;
-                break;
-              }
-            }
-            if (idx === -1) return prev;
-            const updated = [...prev];
-            const item = updated[idx];
-            if (item.kind === 'turn') {
-              updated[idx] = { ...item, toolCalls: [...(item.toolCalls ?? []), { name, args }] };
-            }
-            return updated;
-          });
-        } else if (event === 'source') {
-          const hits = (data.hits as SourceHit[]) ?? [];
-          setItems((prev) => {
-            let idx = -1;
-            for (let i = prev.length - 1; i >= 0; i--) {
-              const item = prev[i];
-              if (item.kind === 'turn' && item.agentId === data.agentId && !item.done) {
-                idx = i;
-                break;
-              }
-            }
-            if (idx === -1) return prev;
-            const updated = [...prev];
-            const item = updated[idx];
-            if (item.kind === 'turn') {
-              updated[idx] = { ...item, sources: hits };
-            }
-            return updated;
-          });
-        } else if (event === 'status') {
-          const phase = String(data.phase ?? '');
-          const detail = String(data.detail ?? phase);
-          if (phase === 'pickSpeaker') {
-            setItems((prev) => [
-              ...prev,
-              { kind: 'note', id: `note-${Date.now()}-${prev.length}`, text: detail },
-            ]);
-            scrollBottom();
-          } else {
-            setStatus(detail);
-          }
-        } else if (event === 'final') {
-          const text = String(data.text ?? '');
-          setFinalText(text);
-          if (activeTopic) markTopic(activeTopic.id, { status: 'completed', finalText: text });
-          setStatus(null);
-          scrollBottom();
-        } else if (event === 'error') {
-          setError(String(data.message ?? '오류가 발생했습니다.'));
-          if (activeTopic) markTopic(activeTopic.id, { status: 'failed' });
-          setStatus(null);
-        } else if (event === 'done') {
-          if (activeTopic) markTopic(activeTopic.id, { status: 'completed' });
-          setStatus(null);
-        }
-      }
-    },
-    [markTopic],
-  );
-
-  const start = useCallback(async () => {
-    const text = input.trim();
-    if (!text || streaming) return;
-
-    setError(null);
-    setStatus(null);
-    setStreaming(true);
-    setInput('');
-
-    let aborted = false;
-    const controller = new AbortController();
-    abortRef.current = () => {
-      aborted = true;
-      controller.abort();
-    };
-
-    let activeTopic: RoomTopic | null = selectedTopic;
-    try {
-      if (!activeTopic) {
-        activeTopic = await apiFetch<RoomTopic>(`/rooms/${room.id}/topics`, {
-          method: 'POST',
-          body: { title: text },
-        });
-        setSelectedTopic(activeTopic);
-        setTopics((prev) => upsertTopic(prev, activeTopic!));
-        setItems([]);
-      }
-
-      setFinalText(null);
-      markTopic(activeTopic.id, { status: 'running', finalText: null, completedAt: null });
-      setItems((prev) => [...prev, { kind: 'user', id: `user-${Date.now()}`, content: text }]);
-      scrollBottom();
-
-      const res = await fetch(`/api/rooms/${room.id}/topics/${activeTopic.id}/discuss`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${localStorage.getItem('rai.token') ?? ''}`,
-        },
-        body: JSON.stringify({ message: text }),
-        signal: controller.signal,
-      });
-
-      if (!res.ok) {
-        const data = (await res.json().catch(() => ({}))) as { message?: string };
-        throw new ApiError(res.status, data.message ?? '요청 실패');
-      }
-
-      await consumeStream(res, activeTopic);
-    } catch (err) {
-      if (!aborted) {
-        setError(err instanceof ApiError ? err.message : '응답 처리 중 오류가 발생했습니다.');
-        if (activeTopic) markTopic(activeTopic.id, { status: 'failed' });
-      }
-    } finally {
-      setStreaming(false);
-      setStatus(null);
-      abortRef.current = null;
-      void refreshTopics();
-    }
-  }, [consumeStream, input, markTopic, refreshTopics, room.id, selectedTopic, streaming]);
-
-  const reconnect = useCallback(
-    async (topic: RoomTopic) => {
-      setError(null);
-      setStatus(null);
-      setStreaming(true);
-
-      const controller = new AbortController();
-      abortRef.current = () => controller.abort();
-
-      try {
-        const res = await apiStreamGet(
-          `/rooms/${room.id}/topics/${topic.id}/stream`,
-          controller.signal,
-        );
-        await consumeStream(res, topic);
-      } catch {
-        // 재연결 실패/중단 시 무시 — 아래 finally에서 최신 상태로 갱신
-      } finally {
-        setStreaming(false);
-        setStatus(null);
-        abortRef.current = null;
-        void refreshTopics();
-      }
-    },
-    [consumeStream, refreshTopics, room.id],
-  );
-
   useEffect(() => {
     if (!selectedTopic) {
-      setItems([]);
-      setFinalText(null);
       agentColorMap.current.clear();
       return;
     }
@@ -348,7 +150,6 @@ export default function RoomDiscussView({ room }: Props) {
 
     let cancelled = false;
     setLoadingTopic(true);
-    setError(null);
     apiFetch<{ topic: RoomTopic; messages: RoomTopicMessage[] }>(
       `/rooms/${room.id}/topics/${selectedTopic.id}/messages`,
     )
@@ -356,19 +157,21 @@ export default function RoomDiscussView({ room }: Props) {
         if (cancelled) return;
         setSelectedTopic(data.topic);
         setTopics((prev) => upsertTopic(prev, data.topic));
-        setItems(toDisplayItems(data.messages));
-        setFinalText(data.topic.finalText ?? null);
         agentColorMap.current.clear();
+        init(data.topic.id);
+        hydrate(data.topic.id, toDisplayItems(data.messages), data.topic.finalText ?? null);
         scrollBottom();
         if (data.topic.status === 'running') {
-          void reconnect(data.topic);
+          void reconnect(data.topic.id, {
+            roomId: room.id,
+            onTopicStatus: (topicId, patch) => markTopic(topicId, patch),
+            onDone: () => {
+              void refreshTopics();
+            },
+          });
         }
       })
-      .catch((err) => {
-        if (!cancelled) {
-          setError(err instanceof ApiError ? err.message : 'Topic을 불러오지 못했습니다.');
-        }
-      })
+      .catch(() => {})
       .finally(() => {
         if (!cancelled) setLoadingTopic(false);
       });
@@ -376,27 +179,84 @@ export default function RoomDiscussView({ room }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [room.id, selectedTopic?.id, streaming, reconnect]);
+  }, [
+    room.id,
+    selectedTopic?.id,
+    streaming,
+    init,
+    hydrate,
+    reconnect,
+    markTopic,
+    refreshTopics,
+    scrollBottom,
+  ]);
 
-  useEffect(() => () => abortRef.current?.(), []);
+  useEffect(() => {
+    scrollBottom();
+  }, [displayItems, status, scrollBottom]);
+
+  const runSend = useCallback(
+    async (raw: string) => {
+      const command = parseRoomCommand(raw);
+      if (command.type === 'exit') {
+        if (streaming) return;
+        setSelectedTopic(null);
+        setInput('');
+        agentColorMap.current.clear();
+        return;
+      }
+
+      if (streaming) return;
+      setInput('');
+
+      if (command.type === 'new-topic' || !selectedTopic) {
+        const message = command.message;
+        if (!message) return;
+        if (command.type === 'new-topic' && selectedTopic) {
+          setSelectedTopic(null);
+          agentColorMap.current.clear();
+        }
+        await discussNew(message, sendCtx);
+        return;
+      }
+
+      if (!command.message) return;
+      init(selectedTopic.id);
+      await send(selectedTopic.id, command.message, sendCtx);
+    },
+    [discussNew, init, selectedTopic, send, sendCtx, streaming],
+  );
+
+  const submit = useCallback(() => {
+    const raw = input;
+    if (!raw.trim()) return;
+    void runSend(raw);
+  }, [input, runSend]);
 
   const stop = useCallback(() => {
     const topicId = selectedTopic?.id;
     if (topicId) {
-      void apiFetch(`/rooms/${room.id}/topics/${topicId}/cancel`, { method: 'POST' }).catch(() => {});
+      void cancelTopic(room.id, topicId).catch(() => {});
+      stopStream(topicId);
+    } else {
+      stopStream(pendingTopicKey(room.id));
     }
-    abortRef.current?.();
-  }, [room.id, selectedTopic?.id]);
+  }, [room.id, selectedTopic?.id, stopStream]);
 
   const openNewTopic = () => {
     if (streaming) return;
     setSelectedTopic(null);
-    setItems([]);
-    setFinalText(null);
     setInput('');
-    setError(null);
     agentColorMap.current.clear();
   };
+
+  const finalText = useMemo(() => {
+    const finalItem = items.find((it) => it.kind === 'final');
+    return finalItem && finalItem.kind === 'final' ? finalItem.text : null;
+  }, [items]);
+
+  const commandMatches = matchRoomCommands(input);
+  const showCommandMenu = commandMatches.length > 0;
 
   return (
     <div className="flex h-full flex-1 bg-zinc-900">
@@ -471,7 +331,7 @@ export default function RoomDiscussView({ room }: Props) {
             <div className="flex h-full items-center justify-center">
               <p className="animate-pulse text-sm text-zinc-500">Topic을 불러오는 중…</p>
             </div>
-          ) : items.length === 0 && !finalText ? (
+          ) : displayItems.length === 0 && !finalText ? (
             <div className="flex h-full items-center justify-center">
               <p className="text-sm text-zinc-500">
                 {selectedTopic ? '이 topic에서 이어서 논의해 보세요.' : '새 topic을 입력하고 토론을 시작하세요.'}
@@ -479,7 +339,7 @@ export default function RoomDiscussView({ room }: Props) {
             </div>
           ) : (
             <div className="mx-auto w-full max-w-2xl space-y-4 px-4 py-6">
-              {items.map((item) =>
+              {displayItems.map((item) =>
                 item.kind === 'user' ? (
                   <div key={item.id} className="ml-auto max-w-[82%] rounded-lg bg-zinc-100 px-4 py-2 text-sm text-zinc-900">
                     {item.content}
@@ -488,6 +348,13 @@ export default function RoomDiscussView({ room }: Props) {
                   <p key={item.id} className="text-center text-[11px] text-zinc-500">
                     - {item.text} -
                   </p>
+                ) : item.kind === 'final' ? (
+                  <div key={item.id} className="rounded-lg border border-emerald-800 bg-emerald-950/40 px-4 py-3">
+                    <p className="mb-2 text-xs font-semibold text-emerald-400">합의 · 결론</p>
+                    <div className="prose text-sm text-zinc-200">
+                      <ReactMarkdown remarkPlugins={[remarkGfm]}>{item.text}</ReactMarkdown>
+                    </div>
+                  </div>
                 ) : (
                   <div
                     key={item.id}
@@ -511,7 +378,7 @@ export default function RoomDiscussView({ room }: Props) {
                     {((item.toolCalls && item.toolCalls.length > 0) ||
                       (item.sources && item.sources.length > 0)) && (
                       <div className="mt-2">
-                        <MessageMeta toolCalls={item.toolCalls} sources={item.sources} />
+                        <MessageMeta toolCalls={item.toolCalls} sources={toSourceHits(item.sources)} />
                       </div>
                     )}
                   </div>
@@ -522,15 +389,6 @@ export default function RoomDiscussView({ room }: Props) {
                 <p role="status" className="animate-pulse text-center text-xs text-zinc-500">
                   - {status} -
                 </p>
-              )}
-
-              {finalText && (
-                <div className="rounded-lg border border-emerald-800 bg-emerald-950/40 px-4 py-3">
-                  <p className="mb-2 text-xs font-semibold text-emerald-400">합의 · 결론</p>
-                  <div className="prose text-sm text-zinc-200">
-                    <ReactMarkdown remarkPlugins={[remarkGfm]}>{finalText}</ReactMarkdown>
-                  </div>
-                </div>
               )}
 
               <div ref={bottomRef} />
@@ -545,7 +403,22 @@ export default function RoomDiscussView({ room }: Props) {
                 {error}
               </p>
             )}
-            <div className="flex gap-2">
+            <div className="relative flex gap-2">
+              {showCommandMenu && (
+                <div className="absolute bottom-full left-0 mb-2 w-full overflow-hidden rounded-lg border border-zinc-700 bg-zinc-800 shadow-lg">
+                  {commandMatches.map((cmd) => (
+                    <button
+                      key={cmd.command}
+                      type="button"
+                      className="flex w-full items-center gap-3 px-3 py-2 text-left hover:bg-zinc-700"
+                      onClick={() => setInput(`${cmd.command} `)}
+                    >
+                      <span className="text-sm font-medium text-zinc-100">{cmd.command}</span>
+                      <span className="truncate text-[11px] text-zinc-500">{cmd.description}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
               <input
                 className="input-base flex-1"
                 placeholder={selectedTopic ? '이 topic에서 이어서 입력하세요' : '새 topic을 입력하세요'}
@@ -553,7 +426,10 @@ export default function RoomDiscussView({ room }: Props) {
                 onChange={(e) => setInput(e.target.value)}
                 disabled={streaming}
                 onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.shiftKey) void start();
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    submit();
+                  }
                 }}
               />
               {streaming ? (
@@ -565,7 +441,7 @@ export default function RoomDiscussView({ room }: Props) {
                   type="button"
                   className="btn btn-primary shrink-0"
                   disabled={!input.trim()}
-                  onClick={() => void start()}
+                  onClick={submit}
                 >
                   {selectedTopic ? '이어가기' : '시작'}
                 </button>

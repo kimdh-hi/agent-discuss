@@ -33,7 +33,7 @@ export default function LoginPage({ onLogin }: Props) {
     <div className="flex h-screen flex-col items-center justify-center bg-zinc-900 px-4">
       <div className="w-full max-w-sm">
         <div className="mb-8 text-center">
-          <h1 className="text-2xl font-semibold tracking-tight text-zinc-100">RAI Agent</h1>
+          <h1 className="text-2xl font-semibold tracking-tight text-zinc-100">Agent Discuss</h1>
           <p className="mt-1.5 text-sm text-zinc-400">워크스페이스 기반 멀티 에이전트</p>
         </div>
 

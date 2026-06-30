@@ -65,11 +65,16 @@ export async function apiUpload<T = unknown>(
   return res.json() as Promise<T>;
 }
 
-export async function apiStream(path: string, body: unknown): Promise<Response> {
+export async function apiStream(
+  path: string,
+  body: unknown,
+  signal?: AbortSignal,
+): Promise<Response> {
   const res = await fetch(`${BASE}${path}`, {
     method: 'POST',
     headers: authHeaders(),
     body: JSON.stringify(body),
+    signal,
   });
   if (!res.ok) return handleError(res);
   return res;

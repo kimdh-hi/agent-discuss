@@ -46,20 +46,11 @@ export default function AgentChatView({ agent, wsId: _wsId }: Props) {
       };
 
       try {
-        const res = await fetch(`/api/agents/${agent.id}/query`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${localStorage.getItem('rai.token') ?? ''}`,
-          },
-          body: JSON.stringify({ message: text }),
-          signal: controller.signal,
-        });
-
-        if (!res.ok) {
-          const data = (await res.json().catch(() => ({}))) as { message?: string };
-          throw new ApiError(res.status, data.message ?? '요청 실패');
-        }
+        const res = await apiStream(
+          `/agents/${agent.id}/query`,
+          { message: text },
+          controller.signal,
+        );
 
         for await (const { event, data } of parseSse(res)) {
           if (event === 'content') {
