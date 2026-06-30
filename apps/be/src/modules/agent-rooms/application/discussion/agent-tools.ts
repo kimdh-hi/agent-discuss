@@ -1,6 +1,6 @@
-import { LlmTool } from '../llm/llm.types';
-import { RagService } from '../rag/rag.service';
-import { buildRagSearchTool } from '../rag/rag.tool';
+import { LlmTool } from '../../../../common/ai/llm/llm.types';
+import { RagService } from '../../../rag/application/rag.service';
+import { buildRagSearchTool } from '../../../rag/application/rag.tool';
 
 const BUILDERS: Record<string, (rag: RagService, agentId: string) => LlmTool> = {
   rag_search: (rag, agentId) => buildRagSearchTool(rag, agentId),
@@ -9,7 +9,7 @@ const BUILDERS: Record<string, (rag: RagService, agentId: string) => LlmTool> = 
 export const DEFAULT_AGENT_TOOLS = ['rag_search'];
 
 export function buildToolsForAgent(
-  agent: { id: string; tools?: string[] },
+  agent: { id: string; tools?: string[] | null },
   rag: RagService,
 ): LlmTool[] {
   const keys = agent.tools ?? DEFAULT_AGENT_TOOLS;

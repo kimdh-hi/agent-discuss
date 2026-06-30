@@ -1,7 +1,7 @@
 import { Body, Controller, Post } from '@nestjs/common';
 import { z } from 'zod';
-import { zodBody } from '../common/zod.pipe';
-import { AuthService } from './auth.service';
+import { zodBody } from '../../../common/http/zod-validation.pipe';
+import { AuthService } from '../application/auth.service';
 
 const DevLoginSchema = z.object({ email: z.string().email() });
 

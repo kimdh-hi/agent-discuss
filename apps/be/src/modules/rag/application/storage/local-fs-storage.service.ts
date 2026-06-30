@@ -6,8 +6,8 @@ import { dirname, resolve, sep } from 'path';
 import type { Readable } from 'stream';
 import { RAG_CONFIG, RagConfig } from '../config/rag-config';
 import { FileStorage } from './storage.types';
-import { BaseException } from '../../common/base.exception';
-import { ErrorCode } from '../../common/error-code';
+import { BaseException } from '../../../../common/errors/base.exception';
+import { ErrorCode } from '../../../../common/errors/error-code';
 
 function extOf(filename: string): string {
   const m = /(\.[^.\/\\]+)$/.exec(filename);

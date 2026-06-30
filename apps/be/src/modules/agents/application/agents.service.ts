@@ -1,14 +1,14 @@
 import { Injectable } from '@nestjs/common';
 import { EntityRepository } from '@mikro-orm/core';
 import { InjectRepository } from '@mikro-orm/nestjs';
-import { BaseException } from '../common/base.exception';
-import { ErrorCode } from '../common/error-code';
-import { Agent, Message } from '../entities';
-import { LlmService } from '../llm/llm.service';
-import { ChatMessage, StreamPart } from '../llm/llm.types';
-import { RagService, Uploader } from '../rag/rag.service';
-import { buildToolsForAgent } from '../orchestrator/agent-tools';
-import { DocumentDto, SearchHit, UploadFileInput } from '../rag/rag.interfaces';
+import { BaseException } from '../../../common/errors/base.exception';
+import { ErrorCode } from '../../../common/errors/error-code';
+import { Agent, Message } from '../../../common/database/entities.registry';
+import { LlmService } from '../../../common/ai/llm/llm.service';
+import { ChatMessage, StreamPart } from '../../../common/ai/llm/llm.types';
+import { RagService, Uploader } from '../../rag/application/rag.service';
+import { buildToolsForAgent } from '../../agent-rooms/application/discussion/agent-tools';
+import { DocumentDto, SearchHit, UploadFileInput } from '../../rag/application/rag.interfaces';
 
 export interface CreateAgentInput {
   name: string;

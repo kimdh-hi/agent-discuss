@@ -2,7 +2,7 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import { EntityRepository } from '@mikro-orm/core';
 import { InjectRepository } from '@mikro-orm/nestjs';
 import { RecursiveCharacterTextSplitter } from '@langchain/textsplitters';
-import { Document, DocumentChunk } from '../entities';
+import { Document, DocumentChunk } from '../../../common/database/entities.registry';
 import { RagLlmService } from './llm/rag-llm.service';
 import { DocumentExtractorService } from './extract/document-extractor.service';
 import { ExtractInput } from './extract/types';

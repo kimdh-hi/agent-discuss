@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { LlmTool } from '../llm/llm.types';
+import { LlmTool } from '../../../common/ai/llm/llm.types';
 import { RagService } from './rag.service';
 
 const MAX_QUERIES = 4;

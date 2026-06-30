@@ -1,98 +1,63 @@
-import { TurnEntry } from './orchestrator.types';
+import type { TurnEntry, Issue, Inconsistency } from './discussion.types';
+import { openIssues, unresolvedInconsistencies } from './discussion.types';
+import { DISCUSSION_LIMITS } from './discussion-limits';
 import { renderTurnLog } from './turn-log';
-
-export const DISCUSSION_CONTEXT_DEFAULTS = {
-  recentTurns: 4,
-  historySummaryMaxChars: 1500,
-  recentTranscriptMaxChars: 4500,
-} as const;
-
-export interface DiscussionContextState {
-  turnLog: TurnEntry[];
-  historySummary?: string;
-  summarizedUntilTurn?: number;
-}
-
-export interface DiscussionContextOptions {
-  recentTurns?: number;
-  historySummaryMaxChars?: number;
-  recentTranscriptMaxChars?: number;
-}
-
-export interface DiscussionContext {
-  text: string;
-  historySummary: string;
-  recentTranscript: string;
-}
+import type { ChatMessage } from '../../../../common/ai/llm/llm.types';
 
 export function buildDiscussionContext(
-  state: DiscussionContextState,
-  options: DiscussionContextOptions = {},
-): DiscussionContext {
-  const limits = { ...DISCUSSION_CONTEXT_DEFAULTS, ...options };
-  const summary = limitText((state.historySummary ?? '').trim(), limits.historySummaryMaxChars);
-  const recentTranscript = renderTurnLogWithinBudget(
-    recentEntries(state.turnLog, limits.recentTurns),
-    limits.recentTranscriptMaxChars,
-  );
+  turnLog: TurnEntry[],
+  historySummary: string,
+  keepTurns: number = DISCUSSION_LIMITS.compactKeepTurns,
+): string {
+  const recent = turnLog.slice(-keepTurns);
+  const parts: string[] = [];
+  if (historySummary) {
+    parts.push(`[이전 논의 요약]\n${historySummary}`);
+  }
+  if (recent.length > 0) {
+    parts.push(`[최근 발언]\n${renderTurnLog(recent)}`);
+  }
+  return parts.join('\n\n');
+}
 
-  if (!summary) {
-    const fullTranscript = renderTurnLogWithinBudget(state.turnLog, limits.recentTranscriptMaxChars);
-    return { text: fullTranscript, historySummary: '', recentTranscript: fullTranscript };
+export function buildDiscussionMessages(
+  turnLog: TurnEntry[],
+  historySummary: string,
+  currentAgentId: string,
+  issues: Issue[],
+  inconsistencies: Inconsistency[],
+  keepTurns: number = DISCUSSION_LIMITS.compactKeepTurns,
+): ChatMessage[] {
+  const recent = turnLog.slice(-keepTurns);
+  const open = openIssues(issues);
+  const unresolved = unresolvedInconsistencies(inconsistencies);
+
+  const contextParts: string[] = [];
+  if (historySummary) {
+    contextParts.push(`[이전 논의 요약]\n${historySummary}`);
+  }
+  if (open.length > 0) {
+    contextParts.push(`[열린 쟁점]\n${open.map((i) => `- ${i.title}: ${i.claims.join(', ')}`).join('\n')}`);
+  }
+  if (unresolved.length > 0) {
+    contextParts.push(`[미해소 모순]\n${unresolved.map((i) => `- ${i.description}`).join('\n')}`);
   }
 
-  const text = [
-    `[요약된 이전 토론]\n${summary}`,
-    recentTranscript ? `[최근 발언 원문]\n${recentTranscript}` : '',
-  ]
-    .filter(Boolean)
-    .join('\n\n');
+  const messages: ChatMessage[] = [];
 
-  return { text, historySummary: summary, recentTranscript };
-}
+  if (contextParts.length > 0) {
+    messages.push({ role: 'user', content: contextParts.join('\n\n') });
+  }
 
-export function entriesNeedingSummary(
-  state: DiscussionContextState,
-  options: Pick<DiscussionContextOptions, 'recentTurns'> = {},
-): TurnEntry[] {
-  const recentTurns = options.recentTurns ?? DISCUSSION_CONTEXT_DEFAULTS.recentTurns;
-  const summarizedUntilTurn = state.summarizedUntilTurn ?? 0;
-  const compactableEnd = Math.max(state.turnLog.length - recentTurns, 0);
-  return state.turnLog.slice(0, compactableEnd).filter((entry) => entry.round > summarizedUntilTurn);
-}
-
-export function lastSummarizedTurn(entries: TurnEntry[], fallback: number): number {
-  return entries.at(-1)?.round ?? fallback;
-}
-
-export function limitText(text: string, maxChars: number): string {
-  if (text.length <= maxChars) return text;
-  const suffix = '\n...(길이 제한으로 일부 생략)';
-  return `${text.slice(0, Math.max(maxChars - suffix.length, 0)).trimEnd()}${suffix}`;
-}
-
-function recentEntries(entries: TurnEntry[], recentTurns: number): TurnEntry[] {
-  return entries.slice(Math.max(entries.length - recentTurns, 0));
-}
-
-function renderTurnLogWithinBudget(entries: TurnEntry[], maxChars: number): string {
-  const rendered = entries.map((entry) => renderTurnLog([entry]));
-  const full = rendered.join('\n');
-  if (full.length <= maxChars) return full;
-
-  const kept: string[] = [];
-  let used = 0;
-  for (let i = rendered.length - 1; i >= 0; i--) {
-    const line = rendered[i];
-    const separator = kept.length > 0 ? 1 : 0;
-    if (used + separator + line.length <= maxChars) {
-      kept.unshift(line);
-      used += separator + line.length;
-      continue;
+  for (const entry of recent) {
+    const isOwn = entry.agentId === currentAgentId;
+    if (isOwn) {
+      messages.push({ role: 'assistant', content: entry.content });
+    } else {
+      const speaker = entry.role === 'moderator' ? '진행자' : entry.agentName;
+      messages.push({ role: 'user', content: `[${speaker}]: ${entry.content}` });
     }
-    if (kept.length === 0) return limitText(line, maxChars);
-    break;
   }
 
-  return ['[최근 발언 일부 생략]', ...kept].join('\n');
+  return messages;
 }

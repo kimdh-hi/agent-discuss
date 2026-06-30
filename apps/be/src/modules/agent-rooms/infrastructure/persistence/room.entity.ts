@@ -1,11 +1,17 @@
-import { Entity, Property } from '@mikro-orm/core';
-import { BaseEntity } from './base.entity';
+import { defineEntity, p } from '@mikro-orm/core';
+import { randomUUID } from 'node:crypto';
 
-@Entity({ tableName: 'rooms' })
-export class Room extends BaseEntity {
-  @Property({ type: 'string' })
-  workspaceId!: string;
+const RoomSchema = defineEntity({
+  name: 'Room',
+  tableName: 'rooms',
+  properties: {
+    id: p.uuid().primary().onCreate(() => randomUUID()),
+    workspaceId: p.string(),
+    name: p.string(),
+    createdAt: p.datetime().onCreate(() => new Date()),
+  },
+});
 
-  @Property({ type: 'string' })
-  name!: string;
-}
+export class Room extends RoomSchema.class {}
+
+RoomSchema.setClass(Room);

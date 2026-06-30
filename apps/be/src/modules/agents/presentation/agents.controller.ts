@@ -15,17 +15,17 @@ import {
 import { FilesInterceptor } from '@nestjs/platform-express';
 import { Response } from 'express';
 import { z } from 'zod';
-import { zodBody } from '../common/zod.pipe';
-import { initSse, sendSse } from '../common/sse';
-import { BaseException } from '../common/base.exception';
-import { ErrorCode } from '../common/error-code';
-import { AuthGuard } from '../auth/auth.guard';
-import { WorkspaceMemberGuard } from '../auth/workspace-member.guard';
-import { ScopedAgent, CurrentUser } from '../auth/current-user.decorator';
-import { AuthUser } from '../auth/auth.service';
-import { Agent } from '../entities';
-import { UploadFileInput } from '../rag/rag.interfaces';
-import { AgentsService } from './agents.service';
+import { zodBody } from '../../../common/http/zod-validation.pipe';
+import { initSse, sendSse } from '../../../common/http/sse';
+import { BaseException } from '../../../common/errors/base.exception';
+import { ErrorCode } from '../../../common/errors/error-code';
+import { AuthGuard } from '../../../common/security/auth.guard';
+import { WorkspaceMemberGuard } from '../../../common/security/workspace-member.guard';
+import { ScopedAgent, CurrentUser } from '../../../common/security/current-user.decorator';
+import { AuthUser } from '../../auth/application/auth.service';
+import { Agent } from '../../../common/database/entities.registry';
+import { UploadFileInput } from '../../rag/application/rag.interfaces';
+import { AgentsService } from '../application/agents.service';
 
 const CreateSchema = z.object({
   name: z.string().min(1),

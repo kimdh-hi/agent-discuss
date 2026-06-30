@@ -2,10 +2,10 @@ import { CanActivate, ExecutionContext, Injectable } from '@nestjs/common';
 import { Request } from 'express';
 import { EntityRepository } from '@mikro-orm/core';
 import { InjectRepository } from '@mikro-orm/nestjs';
-import { BaseException } from '../common/base.exception';
-import { ErrorCode } from '../common/error-code';
-import { Agent, Room, WorkspaceMember } from '../entities';
-import { AuthUser } from './auth.service';
+import { BaseException } from '../errors/base.exception';
+import { ErrorCode } from '../errors/error-code';
+import { Agent, Room, WorkspaceMember } from '../database/entities.registry';
+import { AuthUser } from '../../modules/auth/application/auth.service';
 
 @Injectable()
 export class WorkspaceMemberGuard implements CanActivate {

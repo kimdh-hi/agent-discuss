@@ -1,9 +1,9 @@
 import { Injectable } from '@nestjs/common';
 import { EntityRepository } from '@mikro-orm/core';
 import { InjectRepository } from '@mikro-orm/nestjs';
-import { BaseException } from '../common/base.exception';
-import { ErrorCode } from '../common/error-code';
-import { User, Workspace, WorkspaceMember } from '../entities';
+import { BaseException } from '../../../common/errors/base.exception';
+import { ErrorCode } from '../../../common/errors/error-code';
+import { User, Workspace, WorkspaceMember } from '../../../common/database/entities.registry';
 
 @Injectable()
 export class WorkspacesService {

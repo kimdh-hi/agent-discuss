@@ -1,22 +1,24 @@
-import { Entity, Property } from '@mikro-orm/core';
-import { BaseEntity } from './base.entity';
+import { defineEntity, p } from '@mikro-orm/core';
+import { randomUUID } from 'node:crypto';
+import type { DiscussionSnapshot } from '../../domain/discussion';
 
 export type RoomTopicStatus = 'open' | 'running' | 'completed' | 'failed';
 
-@Entity({ tableName: 'room_topics' })
-export class RoomTopic extends BaseEntity {
-  @Property({ type: 'string' })
-  roomId!: string;
+const RoomTopicSchema = defineEntity({
+  name: 'RoomTopic',
+  tableName: 'room_topics',
+  properties: {
+    id: p.uuid().primary().onCreate(() => randomUUID()),
+    roomId: p.string(),
+    title: p.string(),
+    status: p.string().$type<RoomTopicStatus>().default('open'),
+    finalText: p.text().nullable(),
+    completedAt: p.datetime().nullable(),
+    runState: p.json<DiscussionSnapshot>().nullable(),
+    createdAt: p.datetime().onCreate(() => new Date()),
+  },
+});
 
-  @Property({ type: 'string' })
-  title!: string;
+export class RoomTopic extends RoomTopicSchema.class {}
 
-  @Property({ type: 'string' })
-  status: RoomTopicStatus = 'open';
-
-  @Property({ type: 'text', nullable: true })
-  finalText?: string | null;
-
-  @Property({ type: 'datetime', nullable: true })
-  completedAt?: Date | null;
-}
+RoomTopicSchema.setClass(RoomTopic);

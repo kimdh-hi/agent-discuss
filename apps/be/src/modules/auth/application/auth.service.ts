@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { EntityRepository } from '@mikro-orm/core';
 import { InjectRepository } from '@mikro-orm/nestjs';
-import { User } from '../entities';
+import { User } from '../../../common/database/entities.registry';
 
 export interface AuthUser {
   userId: string;

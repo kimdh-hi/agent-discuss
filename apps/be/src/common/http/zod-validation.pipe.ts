@@ -1,7 +1,7 @@
 import { ArgumentMetadata, PipeTransform } from '@nestjs/common';
 import { ZodSchema } from 'zod';
-import { BaseException } from './base.exception';
-import { ErrorCode } from './error-code';
+import { BaseException } from '../errors/base.exception';
+import { ErrorCode } from '../errors/error-code';
 
 class ZodValidationPipe<T> implements PipeTransform {
   constructor(private readonly schema: ZodSchema<T>) {}

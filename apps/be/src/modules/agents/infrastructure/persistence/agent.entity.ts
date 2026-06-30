@@ -1,26 +1,22 @@
-import { Entity, Property } from '@mikro-orm/core';
-import { BaseEntity } from './base.entity';
+import { defineEntity, p } from '@mikro-orm/core';
+import { randomUUID } from 'node:crypto';
 
-@Entity({ tableName: 'agents' })
-export class Agent extends BaseEntity {
-  @Property({ type: 'string' })
-  workspaceId!: string;
+const AgentSchema = defineEntity({
+  name: 'Agent',
+  tableName: 'agents',
+  properties: {
+    id: p.uuid().primary().onCreate(() => randomUUID()),
+    workspaceId: p.string(),
+    name: p.string(),
+    instructions: p.text(),
+    description: p.text().nullable(),
+    model: p.string(),
+    tools: p.json<string[]>().nullable(),
+    maxToolIterations: p.integer().nullable(),
+    createdAt: p.datetime().onCreate(() => new Date()),
+  },
+});
 
-  @Property({ type: 'string' })
-  name!: string;
+export class Agent extends AgentSchema.class {}
 
-  @Property({ type: 'text' })
-  instructions!: string;
-
-  @Property({ type: 'text', nullable: true })
-  description?: string;
-
-  @Property({ type: 'string' })
-  model!: string;
-
-  @Property({ type: 'json', nullable: true })
-  tools?: string[];
-
-  @Property({ type: 'integer', nullable: true })
-  maxToolIterations?: number;
-}
+AgentSchema.setClass(Agent);

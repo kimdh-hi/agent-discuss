@@ -1,4 +1,4 @@
-import { Document } from '../entities';
+import { Document } from '../../../common/database/entities.registry';
 
 export interface SearchHit {
   documentId: string;

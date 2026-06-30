@@ -1,17 +1,21 @@
-import { Entity, Property, Unique } from '@mikro-orm/core';
-import { BaseEntity } from './base.entity';
+import { defineEntity, p } from '@mikro-orm/core';
+import { randomUUID } from 'node:crypto';
 
 export type WorkspaceRole = 'owner' | 'member';
 
-@Entity({ tableName: 'workspace_members' })
-@Unique({ properties: ['workspaceId', 'userId'] })
-export class WorkspaceMember extends BaseEntity {
-  @Property({ type: 'string' })
-  workspaceId!: string;
+const WorkspaceMemberSchema = defineEntity({
+  name: 'WorkspaceMember',
+  tableName: 'workspace_members',
+  uniques: [{ properties: ['workspaceId', 'userId'] }],
+  properties: {
+    id: p.uuid().primary().onCreate(() => randomUUID()),
+    workspaceId: p.string(),
+    userId: p.string(),
+    role: p.string().$type<WorkspaceRole>().default('member'),
+    createdAt: p.datetime().onCreate(() => new Date()),
+  },
+});
 
-  @Property({ type: 'string' })
-  userId!: string;
+export class WorkspaceMember extends WorkspaceMemberSchema.class {}
 
-  @Property({ type: 'string' })
-  role: WorkspaceRole = 'member';
-}
+WorkspaceMemberSchema.setClass(WorkspaceMember);

@@ -1,18 +1,35 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { EntityRepository } from '@mikro-orm/core';
 import { InjectRepository } from '@mikro-orm/nestjs';
-import { BaseException } from '../common/base.exception';
-import { ErrorCode } from '../common/error-code';
-import { Agent, Message, Room, RoomAgent, RoomTopic } from '../entities';
+import { BaseException } from '../../../common/errors/base.exception';
+import { ErrorCode } from '../../../common/errors/error-code';
+import { Agent, Room, RoomAgent, RoomTopic, RoomTopicMessage } from '../../../common/database/entities.registry';
+import { LlmService } from '../../../common/ai/llm/llm.service';
+import { RagService } from '../../rag/application/rag.service';
 import { Observable } from 'rxjs';
-import { OrchestratorService } from '../orchestrator/orchestrator.service';
-import { RoomAgentSpec, RoomEvent, TurnEntry } from '../orchestrator/orchestrator.types';
-import { DiscussionHubService } from '../orchestrator/discussion-hub.service';
-import { MODERATOR } from '../orchestrator/prompts';
+import { DiscussionService } from './discussion/discussion.service';
+import { DiscussionHubService } from './discussion/discussion-hub.service';
+import {
+  RoomAgentSpec,
+  RoomEvent,
+  TurnEntry,
+  DiscussionSnapshot,
+} from './discussion/discussion.types';
+import { DEFAULT_MODEL_ID } from './discussion/discussion-config';
+import { DISCUSSION_LIMITS } from './discussion/discussion-limits';
+import { agentTurnCount } from './discussion/discussion-run-state';
+import { MODERATOR } from '../../../common/prompt/discussion';
+import {
+  completeRoomTopic,
+  markRoomTopicFailed,
+  saveRoomTopicState,
+  startRoomTopicRun,
+  type RoomTopicMessageRole,
+} from '../domain/room';
 
 export interface TopicMessageDto {
   id: string;
-  role: Message['role'];
+  role: RoomTopicMessageRole;
   agentId?: string;
   agentName?: string;
   round?: number;
@@ -21,15 +38,19 @@ export interface TopicMessageDto {
 }
 
 @Injectable()
-export class RoomsService {
+export class AgentRoomsService {
+  private readonly logger = new Logger(AgentRoomsService.name);
+
   constructor(
     @InjectRepository(Room) private readonly roomRepository: EntityRepository<Room>,
     @InjectRepository(RoomTopic) private readonly topicRepository: EntityRepository<RoomTopic>,
     @InjectRepository(RoomAgent) private readonly roomAgentRepository: EntityRepository<RoomAgent>,
     @InjectRepository(Agent) private readonly agentRepository: EntityRepository<Agent>,
-    @InjectRepository(Message) private readonly messageRepository: EntityRepository<Message>,
-    private readonly orchestrator: OrchestratorService,
+    @InjectRepository(RoomTopicMessage) private readonly messageRepository: EntityRepository<RoomTopicMessage>,
+    private readonly discussion: DiscussionService,
     private readonly hub: DiscussionHubService,
+    private readonly llm: LlmService,
+    private readonly rag: RagService,
   ) {}
 
   async create(workspaceId: string, name: string, agentIds: string[]): Promise<Room> {
@@ -75,7 +96,9 @@ export class RoomsService {
   async removeAgent(room: Room, agentId: string): Promise<{ ok: boolean }> {
     const link = await this.roomAgentRepository.findOne({ roomId: room.id, agentId });
     if (link) {
-      await this.roomAgentRepository.getEntityManager().removeAndFlush(link);
+      const em = this.roomAgentRepository.getEntityManager();
+      em.remove(link);
+      await em.flush();
     }
     return { ok: true };
   }
@@ -85,7 +108,7 @@ export class RoomsService {
     if (topic.status === 'running') {
       throw new BaseException(ErrorCode.BAD_REQUEST, '진행 중인 topic은 삭제할 수 없습니다.');
     }
-    const messages = await this.messageRepository.find({ scope: 'topic', refId: topicId });
+    const messages = await this.messageRepository.find({ topicId });
     const em = this.messageRepository.getEntityManager();
     for (const msg of messages) em.remove(msg);
     em.remove(topic);
@@ -102,10 +125,11 @@ export class RoomsService {
       id: a.id,
       name: a.name,
       instructions: a.instructions,
-      model: a.model,
-      description: a.description,
-      tools: a.tools,
-      maxToolIterations: a.maxToolIterations,
+      model: a.model || DEFAULT_MODEL_ID,
+      description: a.description ?? undefined,
+      hasKnowledge: this.agentHasKnowledge(a),
+      knowledgeScope: a.id,
+      maxToolIterations: a.maxToolIterations ?? undefined,
     }));
   }
 
@@ -130,7 +154,7 @@ export class RoomsService {
 
   async cancelTopic(room: Room, topicId: string): Promise<{ ok: boolean }> {
     await this.getTopicOrThrow(room, topicId);
-    return { ok: this.hub.cancel(topicId) };
+    return { ok: this.hub.cancel(topicId).ok };
   }
 
   async beginTopicDiscussion(
@@ -146,31 +170,40 @@ export class RoomsService {
     const specs = await this.getSpecs(room.id);
     const previousMessages = await this.findTopicMessages(topic.id);
     const initialTurnLog = this.toTurnEntries(previousMessages, specs);
-    const historySummary = this.buildContinuationSummary(topic, previousMessages);
+    const restoredSnapshot = topic.runState ?? null;
+    const historySummary = this.buildContinuationSummary(topic, previousMessages, restoredSnapshot);
 
-    topic.status = 'running';
-    topic.finalText = null;
-    topic.completedAt = null;
-    this.messageRepository.create({ scope: 'topic', refId: topic.id, role: 'user', content: message });
+    startRoomTopicRun(topic);
+    this.messageRepository.create({ topicId: topic.id, role: 'user', content: message });
     await this.messageRepository.getEntityManager().flush();
 
     const controller = new AbortController();
-    const { events, turnLog } = this.orchestrator.run(message, specs, {
+    const { subject, completion } = await this.discussion.run(message, specs, {
+      llm: this.llm,
+      ragService: this.rag,
       initialTurnLog,
       historySummary,
-      initialTurn: initialTurnLog.reduce((max, entry) => Math.max(max, entry.round), 0),
+      initialTurn: restoredSnapshot?.turn ?? agentTurnCount(initialTurnLog),
       skipGate: initialTurnLog.length > 0,
       signal: controller.signal,
+      initialSnapshot: restoredSnapshot ?? undefined,
     });
-    const completion = turnLog
-      .then((entries) => this.completeTopic(topic, entries.slice(initialTurnLog.length)))
+
+    const completionPromise = completion
+      .then(({ turnLog, snapshot }) => this.completeTopic(topic, turnLog, snapshot))
       .catch(async (err) => {
-        topic.status = 'failed';
+        this.logger.error(`Discussion completion failed: ${(err as Error).message}`);
+        markRoomTopicFailed(topic);
         await this.topicRepository.getEntityManager().flush();
         throw err;
       });
-    this.hub.register(topic.id, events, completion, controller);
+    this.hub.register(topic.id, subject, completionPromise, controller);
     return { topic };
+  }
+
+  private agentHasKnowledge(agent: Agent): boolean {
+    const tools = agent.tools ?? ['rag_search'];
+    return tools.includes('rag_search');
   }
 
   private async scopedAgentIds(workspaceId: string, agentIds: string[]): Promise<string[]> {
@@ -185,46 +218,51 @@ export class RoomsService {
     return topic;
   }
 
-  private async findTopicMessages(topicId: string): Promise<Message[]> {
-    return this.messageRepository.find(
-      { scope: 'topic', refId: topicId },
-      { orderBy: { createdAt: 'asc' } },
-    );
+  private async findTopicMessages(topicId: string): Promise<RoomTopicMessage[]> {
+    return this.messageRepository.find({ topicId }, { orderBy: { createdAt: 'asc' } });
   }
 
-  private async completeTopic(topic: RoomTopic, entries: TurnEntry[]): Promise<void> {
+  private async completeTopic(
+    topic: RoomTopic,
+    entries: TurnEntry[],
+    snapshot: DiscussionSnapshot,
+  ): Promise<void> {
     for (const e of entries) {
+      if (!e.content.trim()) continue;
       this.messageRepository.create({
-        scope: 'topic',
-        refId: topic.id,
-        role: e.role,
-        agentId: e.agentId,
+        topicId: topic.id,
+        role: e.role as RoomTopicMessageRole,
+        agentId: e.agentId ?? null,
         round: e.round,
         content: e.content,
       });
     }
 
-    const finalEntry = entries.findLast((entry) => entry.role === 'moderator');
-    topic.status = 'completed';
-    topic.finalText = finalEntry?.content ?? null;
-    topic.completedAt = new Date();
+    const finalEntry = [...entries].reverse().find((entry) => entry.role === 'moderator' && entry.content.trim());
+    completeRoomTopic(topic, finalEntry?.content ?? null);
+    saveRoomTopicState(topic, snapshot);
     await this.messageRepository.getEntityManager().flush();
   }
 
-  private toTurnEntries(messages: Message[], agents: RoomAgentSpec[]): TurnEntry[] {
+  private toTurnEntries(messages: RoomTopicMessage[], agents: RoomAgentSpec[]): TurnEntry[] {
     const names = new Map(agents.map((agent) => [agent.id, agent.name]));
     return messages
-      .filter((msg) => msg.role === 'agent' || msg.role === 'moderator')
+      .filter((msg) => (msg.role === 'agent' || msg.role === 'moderator') && msg.content.trim())
       .map((msg) => ({
         role: msg.role as 'agent' | 'moderator',
-        agentId: msg.agentId,
+        agentId: msg.agentId ?? undefined,
         agentName: msg.role === 'moderator' ? MODERATOR : names.get(msg.agentId ?? '') ?? '에이전트',
         round: msg.round ?? 0,
         content: msg.content,
       }));
   }
 
-  private buildContinuationSummary(topic: RoomTopic, messages: Message[]): string {
+  private buildContinuationSummary(
+    topic: RoomTopic,
+    messages: RoomTopicMessage[],
+    snapshot: DiscussionSnapshot | null,
+  ): string {
+    if (snapshot?.historySummary?.trim()) return snapshot.historySummary;
     if (messages.length === 0 && !topic.finalText) return '';
 
     const userMessages = messages
@@ -235,26 +273,26 @@ export class RoomsService {
     return [
       `Topic: ${topic.title}`,
       userMessages ? `[사용자 요청 이력]\n${userMessages}` : '',
-      topic.finalText ? `[직전 결론]\n${topic.finalText}` : '',
+      topic.finalText ? `[직전 결론]\n${topic.finalText.slice(0, DISCUSSION_LIMITS.maxHistorySummaryChars)}` : '',
     ]
       .filter(Boolean)
       .join('\n\n');
   }
 
-  private async toTopicMessageDtos(messages: Message[]): Promise<TopicMessageDto[]> {
-    const agentIds = [...new Set(messages.map((msg) => msg.agentId).filter((id): id is string => !!id))];
+  private async toTopicMessageDtos(messages: RoomTopicMessage[]): Promise<TopicMessageDto[]> {
+    const visible = messages.filter((m) => m.role === 'user' || m.content.trim());
+    const agentIds = [...new Set(visible.map((msg) => msg.agentId).filter((id): id is string => !!id))];
     const agents = agentIds.length > 0 ? await this.agentRepository.find({ id: { $in: agentIds } }) : [];
     const names = new Map(agents.map((agent) => [agent.id, agent.name]));
 
-    return messages.map((msg) => ({
+    return visible.map((msg) => ({
       id: msg.id,
       role: msg.role,
-      agentId: msg.agentId,
+      agentId: msg.agentId ?? undefined,
       agentName: msg.role === 'moderator' ? MODERATOR : msg.agentId ? names.get(msg.agentId) : undefined,
-      round: msg.round,
+      round: msg.round ?? undefined,
       content: msg.content,
       createdAt: msg.createdAt,
     }));
   }
-
 }

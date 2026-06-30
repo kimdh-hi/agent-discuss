@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { EntityRepository } from '@mikro-orm/core';
 import { InjectRepository } from '@mikro-orm/nestjs';
-import { Document } from '../entities';
+import { Document } from '../../../common/database/entities.registry';
 import { RagLlmService } from './llm/rag-llm.service';
 import { SearchHit } from './rag.interfaces';
 

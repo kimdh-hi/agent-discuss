@@ -1,9 +1,16 @@
-import { Entity, Property, Unique } from '@mikro-orm/core';
-import { BaseEntity } from './base.entity';
+import { defineEntity, p } from '@mikro-orm/core';
+import { randomUUID } from 'node:crypto';
 
-@Entity({ tableName: 'users' })
-export class User extends BaseEntity {
-  @Property({ type: 'string' })
-  @Unique()
-  email!: string;
-}
+const UserSchema = defineEntity({
+  name: 'User',
+  tableName: 'users',
+  properties: {
+    id: p.uuid().primary().onCreate(() => randomUUID()),
+    email: p.string().unique(),
+    createdAt: p.datetime().onCreate(() => new Date()),
+  },
+});
+
+export class User extends UserSchema.class {}
+
+UserSchema.setClass(User);

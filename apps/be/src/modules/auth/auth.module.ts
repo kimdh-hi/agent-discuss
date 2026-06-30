@@ -1,11 +1,11 @@
 import { Global, Module } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
 import { MikroOrmModule } from '@mikro-orm/nestjs';
-import { Agent, Room, User, WorkspaceMember } from '../entities';
-import { AuthService } from './auth.service';
-import { AuthController } from './auth.controller';
-import { AuthGuard } from './auth.guard';
-import { WorkspaceMemberGuard } from './workspace-member.guard';
+import { Agent, Room, User, WorkspaceMember } from '../../common/database/entities.registry';
+import { AuthService } from './application/auth.service';
+import { AuthController } from './presentation/auth.controller';
+import { AuthGuard } from '../../common/security/auth.guard';
+import { WorkspaceMemberGuard } from '../../common/security/workspace-member.guard';
 
 @Global()
 @Module({

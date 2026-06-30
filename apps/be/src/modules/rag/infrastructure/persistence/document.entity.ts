@@ -1,51 +1,30 @@
-import { Entity, Index, Opt, PrimaryKey, Property } from '@mikro-orm/core';
+import { defineEntity, p } from '@mikro-orm/core';
 import { randomUUID } from 'node:crypto';
 
 export type DocumentStatus = 'processing' | 'ready' | 'failed';
 export type DocumentStage = 'extracting' | 'embedding';
 
-@Entity({ tableName: 'documents' })
-export class Document {
-  @PrimaryKey({ type: 'uuid' })
-  id: string & Opt = randomUUID();
+const DocumentSchema = defineEntity({
+  name: 'Document',
+  tableName: 'documents',
+  properties: {
+    id: p.uuid().primary().onCreate(() => randomUUID()),
+    agentId: p.uuid().index(),
+    uploadedById: p.uuid().nullable(),
+    uploadedByName: p.string().length(255).nullable(),
+    filename: p.string().length(255),
+    mimeType: p.string().length(100),
+    size: p.integer(),
+    status: p.string().length(20).$type<DocumentStatus>().default('processing'),
+    stage: p.string().length(20).$type<DocumentStage>().nullable(),
+    storageKey: p.string().length(500).nullable(),
+    error: p.string().length(500).nullable(),
+    chunkCount: p.integer().default(0),
+    createdAt: p.datetime().onCreate(() => new Date()),
+    deletedAt: p.datetime().nullable(),
+  },
+});
 
-  @Property({ type: 'uuid' })
-  @Index()
-  agentId!: string;
+export class Document extends DocumentSchema.class {}
 
-  @Property({ type: 'uuid', nullable: true })
-  uploadedById?: string;
-
-  @Property({ type: 'string', length: 255, nullable: true })
-  uploadedByName?: string;
-
-  @Property({ type: 'string', length: 255 })
-  filename!: string;
-
-  @Property({ type: 'string', length: 100 })
-  mimeType!: string;
-
-  @Property({ type: 'integer' })
-  size!: number;
-
-  @Property({ type: 'string', length: 20 })
-  status: DocumentStatus & Opt = 'processing';
-
-  @Property({ type: 'string', length: 20, nullable: true })
-  stage?: DocumentStage;
-
-  @Property({ type: 'string', length: 500, nullable: true })
-  storageKey?: string;
-
-  @Property({ type: 'string', length: 500, nullable: true })
-  error?: string;
-
-  @Property({ type: 'integer' })
-  chunkCount: number & Opt = 0;
-
-  @Property({ type: 'datetime' })
-  createdAt: Date & Opt = new Date();
-
-  @Property({ type: 'datetime', nullable: true })
-  deletedAt?: Date;
-}
+DocumentSchema.setClass(Document);

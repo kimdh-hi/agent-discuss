@@ -8,7 +8,7 @@ import { MikroORM } from '@mikro-orm/core';
 import { getMikroORMToken } from '@mikro-orm/nestjs';
 import request from 'supertest';
 import { AppModule } from '../src/app.module';
-import { AllExceptionsFilter } from '../src/common/all-exceptions.filter';
+import { AllExceptionsFilter } from '../src/common/errors/all-exceptions.filter';
 
 describe('agent-discuss (e2e)', () => {
   let app: INestApplication;
@@ -19,13 +19,13 @@ describe('agent-discuss (e2e)', () => {
     app = moduleRef.createNestApplication();
     app.useGlobalFilters(new AllExceptionsFilter());
     const orm = app.get(MikroORM);
-    await orm.schema.dropSchema();
-    await orm.schema.createSchema();
+    await orm.schema.drop();
+    await orm.schema.create();
 
     const ragOrm = app.get<MikroORM>(getMikroORMToken('rag'));
     const ragEm = ragOrm.em.fork();
     await ragEm.getConnection().execute('CREATE EXTENSION IF NOT EXISTS vector');
-    await ragOrm.schema.updateSchema();
+    await ragOrm.schema.update();
 
     await app.init();
     server = app.getHttpServer();

@@ -1,14 +1,14 @@
 import { Body, Controller, Delete, Get, Param, Post, Res, UseGuards } from '@nestjs/common';
 import { Response } from 'express';
 import { z } from 'zod';
-import { zodBody } from '../common/zod.pipe';
-import { initSse, sendSse } from '../common/sse';
-import { AuthGuard } from '../auth/auth.guard';
-import { WorkspaceMemberGuard } from '../auth/workspace-member.guard';
-import { ScopedRoom } from '../auth/current-user.decorator';
-import { Room } from '../entities';
-import { RoomsService } from './rooms.service';
-import { RoomEvent } from '../orchestrator/orchestrator.types';
+import { zodBody } from '../../../common/http/zod-validation.pipe';
+import { initSse, sendSse } from '../../../common/http/sse';
+import { AuthGuard } from '../../../common/security/auth.guard';
+import { WorkspaceMemberGuard } from '../../../common/security/workspace-member.guard';
+import { ScopedRoom } from '../../../common/security/current-user.decorator';
+import { Room } from '../../../common/database/entities.registry';
+import { AgentRoomsService } from '../application/agent-rooms.service';
+import { RoomEvent } from '../application/discussion/discussion.types';
 
 const CreateSchema = z.object({
   name: z.string().min(1),
@@ -21,8 +21,8 @@ const TopicDiscussSchema = z.object({ message: z.string().min(1) });
 
 @Controller()
 @UseGuards(AuthGuard)
-export class RoomsController {
-  constructor(private readonly rooms: RoomsService) {}
+export class AgentRoomsController {
+  constructor(private readonly rooms: AgentRoomsService) {}
 
   @Post('workspaces/:wsId/rooms')
   @UseGuards(WorkspaceMemberGuard)

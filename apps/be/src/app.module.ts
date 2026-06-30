@@ -1,15 +1,13 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { MikroOrmModule } from '@mikro-orm/nestjs';
-import { buildOrmConfig } from './database/mikro-orm.config';
-import { buildRagOrmConfig } from './database/rag-orm.config';
-import { AuthModule } from './auth/auth.module';
-import { LlmModule } from './llm/llm.module';
-import { RagModule } from './rag/rag.module';
-import { WorkspacesModule } from './workspaces/workspaces.module';
-import { AgentsModule } from './agents/agents.module';
-import { RoomsModule } from './rooms/rooms.module';
-import { SeedModule } from './seed/seed.module';
+import { buildOrmConfig, buildRagOrmConfig } from './common/database/orm.config';
+import { AuthModule } from './modules/auth/auth.module';
+import { LlmModule } from './common/ai/llm/llm.module';
+import { RagModule } from './modules/rag/rag.module';
+import { WorkspacesModule } from './modules/workspaces/workspaces.module';
+import { AgentsModule } from './modules/agents/agents.module';
+import { AgentRoomsModule } from './modules/agent-rooms/agent-rooms.module';
 
 @Module({
   imports: [
@@ -21,8 +19,7 @@ import { SeedModule } from './seed/seed.module';
     RagModule,
     WorkspacesModule,
     AgentsModule,
-    RoomsModule,
-    SeedModule,
+    AgentRoomsModule,
   ],
 })
 export class AppModule {}

@@ -1,72 +1,90 @@
 import { Annotation } from '@langchain/langgraph';
-import {
+import type {
   DecisionCandidate,
+  DiscussionBrief,
+  DiscussionTerminalReason,
   DiscussionType,
   Inconsistency,
   Issue,
   ParticipantStat,
   TurnEntry,
-} from './orchestrator.types';
+} from './discussion.types';
 
-const replace = <T>() => ({ reducer: (_a: T, b: T) => b });
-
-function mergeById<T extends { id: string }>(current: T[], incoming: T[]): T[] {
-  if (incoming.length === 0) return current;
-  const byId = new Map(current.map((item) => [item.id, item]));
+export function mergeById<T extends { id: string }>(existing: T[], incoming: T[]): T[] {
+  const map = new Map(existing.map((e) => [e.id, e]));
   for (const item of incoming) {
-    byId.set(item.id, item);
+    map.set(item.id, item);
   }
-  return [...byId.values()];
+  return Array.from(map.values());
 }
 
-function mergeStats(
-  current: Record<string, ParticipantStat>,
+export function mergeIssues(existing: Issue[], incoming: Issue[]): Issue[] {
+  const map = new Map(existing.map((issue) => [issue.id, issue]));
+  for (const item of incoming) {
+    const prev = map.get(item.id);
+    if (!prev) {
+      map.set(item.id, { ...item, revisits: item.revisits ?? 0 });
+      continue;
+    }
+
+    const touchedAgain = item.lastTouchedTurn > prev.lastTouchedTurn;
+    map.set(item.id, {
+      ...prev,
+      ...item,
+      revisits: touchedAgain
+        ? Math.max(item.revisits ?? 0, prev.revisits + 1)
+        : Math.max(item.revisits ?? 0, prev.revisits),
+    });
+  }
+  return Array.from(map.values());
+}
+
+export function mergeStats(
+  existing: Record<string, ParticipantStat>,
   incoming: Record<string, ParticipantStat>,
 ): Record<string, ParticipantStat> {
-  if (Object.keys(incoming).length === 0) return current;
-  const merged: Record<string, ParticipantStat> = { ...current };
+  const result = { ...existing };
   for (const [id, stat] of Object.entries(incoming)) {
-    const prev = merged[id] ?? { turns: 0, newClaims: 0, repeatClaims: 0 };
-    merged[id] = {
+    const prev = result[id] ?? { turns: 0, newClaims: 0, repeatClaims: 0 };
+    result[id] = {
       turns: prev.turns + stat.turns,
       newClaims: prev.newClaims + stat.newClaims,
       repeatClaims: prev.repeatClaims + stat.repeatClaims,
     };
   }
-  return merged;
+  return result;
 }
 
 export const DiscussionState = Annotation.Root({
-  turn: Annotation<number>({ ...replace<number>(), default: () => 0 }),
-  turnLog: Annotation<TurnEntry[]>({ reducer: (a, b) => a.concat(b), default: () => [] }),
-  aborted: Annotation<boolean>({ ...replace<boolean>(), default: () => false }),
-  nextSpeakerId: Annotation<string | null>({ ...replace<string | null>(), default: () => null }),
-  pendingYield: Annotation<string | null>({ ...replace<string | null>(), default: () => null }),
-  yieldStreak: Annotation<number>({ ...replace<number>(), default: () => 0 }),
-  lastDone: Annotation<boolean>({ ...replace<boolean>(), default: () => false }),
-  historySummary: Annotation<string>({ ...replace<string>(), default: () => '' }),
-  summarizedUntilTurn: Annotation<number>({ ...replace<number>(), default: () => 0 }),
-  discussionType: Annotation<DiscussionType>({ ...replace<DiscussionType>(), default: () => 'decision' }),
-  outputContract: Annotation<string[]>({ ...replace<string[]>(), default: () => [] }),
-  options: Annotation<string[]>({ ...replace<string[]>(), default: () => [] }),
-  issues: Annotation<Issue[]>({ reducer: mergeById, default: () => [] }),
-  inconsistencies: Annotation<Inconsistency[]>({ reducer: mergeById, default: () => [] }),
-  participantStats: Annotation<Record<string, ParticipantStat>>({ reducer: mergeStats, default: () => ({}) }),
-  converging: Annotation<boolean>({ ...replace<boolean>(), default: () => false }),
-  decisionCandidate: Annotation<DecisionCandidate | null>({
-    ...replace<DecisionCandidate | null>(),
-    default: () => null,
+  turn: Annotation<number>({ reducer: (_, b) => b, default: () => 0 }),
+  turnLog: Annotation<TurnEntry[]>({
+    reducer: (a, b) => [...a, ...b],
+    default: () => [],
   }),
-  droughtCount: Annotation<number>({ ...replace<number>(), default: () => 0 }),
-  resolveRetries: Annotation<number>({ ...replace<number>(), default: () => 0 }),
+  aborted: Annotation<boolean>({ reducer: (_, b) => b, default: () => false }),
+  nextSpeakerId: Annotation<string | null>({ reducer: (_, b) => b, default: () => null }),
+  historySummary: Annotation<string>({ reducer: (_, b) => b, default: () => '' }),
+  summarizedUntilTurn: Annotation<number>({ reducer: (_, b) => b, default: () => 0 }),
+  brief: Annotation<DiscussionBrief | null>({ reducer: (_, b) => b, default: () => null }),
+  discussionType: Annotation<DiscussionType>({ reducer: (_, b) => b, default: () => 'brainstorm' }),
+  outputContract: Annotation<string[]>({ reducer: (_, b) => b, default: () => [] }),
+  options: Annotation<string[]>({ reducer: (_, b) => b, default: () => [] }),
+  issues: Annotation<Issue[]>({
+    reducer: mergeIssues,
+    default: () => [],
+  }),
+  inconsistencies: Annotation<Inconsistency[]>({
+    reducer: mergeById,
+    default: () => [],
+  }),
+  participantStats: Annotation<Record<string, ParticipantStat>>({
+    reducer: mergeStats,
+    default: () => ({}),
+  }),
+  decisionCandidate: Annotation<DecisionCandidate | null>({ reducer: (_, b) => b, default: () => null }),
+  droughtCount: Annotation<number>({ reducer: (_, b) => b, default: () => 0 }),
+  barrenStreak: Annotation<number>({ reducer: (_, b) => b, default: () => 0 }),
+  terminalReason: Annotation<DiscussionTerminalReason | null>({ reducer: (_, b) => b, default: () => null }),
 });
 
-export type DiscussionState = typeof DiscussionState.State;
-
-export function lastSpeakerId(turnLog: TurnEntry[]): string | null {
-  for (let i = turnLog.length - 1; i >= 0; i--) {
-    const entry = turnLog[i];
-    if (entry.role === 'agent' && entry.agentId) return entry.agentId;
-  }
-  return null;
-}
+export type DiscussionStateType = typeof DiscussionState.State;

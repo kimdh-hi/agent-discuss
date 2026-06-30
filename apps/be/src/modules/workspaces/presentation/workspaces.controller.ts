@@ -1,11 +1,11 @@
 import { Body, Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
 import { z } from 'zod';
-import { zodBody } from '../common/zod.pipe';
-import { AuthGuard } from '../auth/auth.guard';
-import { WorkspaceMemberGuard } from '../auth/workspace-member.guard';
-import { CurrentUser } from '../auth/current-user.decorator';
-import { AuthUser } from '../auth/auth.service';
-import { WorkspacesService } from './workspaces.service';
+import { zodBody } from '../../../common/http/zod-validation.pipe';
+import { AuthGuard } from '../../../common/security/auth.guard';
+import { WorkspaceMemberGuard } from '../../../common/security/workspace-member.guard';
+import { CurrentUser } from '../../../common/security/current-user.decorator';
+import { AuthUser } from '../../auth/application/auth.service';
+import { WorkspacesService } from '../application/workspaces.service';
 
 const CreateSchema = z.object({ name: z.string().min(1) });
 const AddMemberSchema = z.object({ email: z.string().email() });

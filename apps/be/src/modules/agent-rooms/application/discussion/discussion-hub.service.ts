@@ -1,11 +1,11 @@
 import { Injectable } from '@nestjs/common';
-import { Observable, ReplaySubject } from 'rxjs';
-import { RoomEvent } from './orchestrator.types';
+import { ReplaySubject, Observable } from 'rxjs';
+import type { RoomEvent } from './discussion.types';
 
 interface HubEntry {
-  stream: ReplaySubject<RoomEvent>;
-  abort: AbortController;
-  done: boolean;
+  subject: ReplaySubject<RoomEvent>;
+  completion: Promise<void>;
+  controller: AbortController;
 }
 
 @Injectable()
@@ -14,34 +14,27 @@ export class DiscussionHubService {
 
   register(
     topicId: string,
-    stream: ReplaySubject<RoomEvent>,
+    subject: ReplaySubject<RoomEvent>,
     completion: Promise<void>,
-    abort: AbortController,
+    controller: AbortController,
   ): void {
-    const entry: HubEntry = { stream, abort, done: false };
-    this.entries.set(topicId, entry);
-    void completion
-      .catch(() => {})
-      .finally(() => {
-        entry.done = true;
-        this.entries.delete(topicId);
-      });
+    this.entries.set(topicId, { subject, completion, controller });
+    void completion.finally(() => this.entries.delete(topicId));
   }
 
   subscribe(topicId: string): Observable<RoomEvent> | null {
     const entry = this.entries.get(topicId);
-    return entry ? entry.stream.asObservable() : null;
+    return entry ? entry.subject.asObservable() : null;
   }
 
-  cancel(topicId: string): boolean {
+  cancel(topicId: string): { ok: boolean } {
     const entry = this.entries.get(topicId);
-    if (!entry) return false;
-    entry.abort.abort();
-    return true;
+    if (!entry) return { ok: false };
+    entry.controller.abort();
+    return { ok: true };
   }
 
-  isActive(topicId: string): boolean {
-    const entry = this.entries.get(topicId);
-    return !!entry && !entry.done;
+  isRunning(topicId: string): boolean {
+    return this.entries.has(topicId);
   }
 }

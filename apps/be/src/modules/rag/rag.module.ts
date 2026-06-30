@@ -1,13 +1,13 @@
 import { Global, Module } from '@nestjs/common';
 import { MikroOrmModule } from '@mikro-orm/nestjs';
-import { Document, DocumentChunk } from '../entities';
-import { RagConfigModule } from './config/rag-config.module';
-import { RagLlmModule } from './llm/rag-llm.module';
-import { ExtractModule } from './extract/extract.module';
-import { StorageModule } from './storage/storage.module';
-import { IndexService } from './index.service';
-import { SearchService } from './search.service';
-import { RagService } from './rag.service';
+import { Document, DocumentChunk } from '../../common/database/entities.registry';
+import { RagConfigModule } from './application/config/rag-config.module';
+import { RagLlmModule } from './application/llm/rag-llm.module';
+import { ExtractModule } from './application/extract/extract.module';
+import { StorageModule } from './application/storage/storage.module';
+import { IndexService } from './application/index.service';
+import { SearchService } from './application/search.service';
+import { RagService } from './application/rag.service';
 
 @Global()
 @Module({

@@ -1,7 +1,7 @@
 import { createParamDecorator, ExecutionContext } from '@nestjs/common';
 import { Request } from 'express';
-import { Agent, Room } from '../entities';
-import { AuthUser } from './auth.service';
+import { Agent, Room } from '../database/entities.registry';
+import { AuthUser } from '../../modules/auth/application/auth.service';
 
 export const CurrentUser = createParamDecorator(
   (_data: unknown, ctx: ExecutionContext): AuthUser =>
