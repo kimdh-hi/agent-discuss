@@ -14,7 +14,7 @@ infra/litellm/config.yaml
 *.sqlite
 *.sqlite-journal
 data/
-apps/be/storage/rag/
+apps/be/storage/
 
 coverage/
 
