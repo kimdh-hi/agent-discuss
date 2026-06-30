@@ -1,109 +1,14 @@
-import { Injectable, Logger, OnApplicationBootstrap } from '@nestjs/common';
-import { EntityRepository } from '@mikro-orm/core';
-import { InjectRepository } from '@mikro-orm/nestjs';
-import { Agent, Room, RoomAgent, User, Workspace, WorkspaceMember } from '../entities';
-import { RagService } from '../rag/rag.service';
+export interface SampleKnowledgeDocument {
+  agentName: string;
+  filename: string;
+  content: string;
+}
 
-const SEED_EMAIL = 'test@test.com';
-const SEED_WORKSPACE = 'demo';
-const DEFAULT_MODEL = 'gpt-4o-mini';
-
-const AGENTS: { name: string; instructions: string; description: string }[] = [
+export const SAMPLE_KNOWLEDGE_DOCUMENTS: SampleKnowledgeDocument[] = [
   {
-    name: 'PM',
-    instructions:
-      'IT 회사의 프로덕트 매니저로서 토론에 참여한다. 사용자 요구사항과 비즈니스 가치를 최우선으로 판단하며, 기능의 필요성과 우선순위를 MoSCoW 프레임워크 기준으로 평가한다. 스프린트 목표와 출시 일정 현실성을 검토하고, 지나치게 기술적인 논의는 사용자 가치 중심으로 재프레이밍한다. 데이터 기반 의사결정을 선호하며 DAU·NPS·전환율 등 제품 KPI를 근거로 주장한다.',
-    description: '요구사항·사용자 스토리·우선순위·출시 일정 판단이 필요할 때 나선다.',
-  },
-  {
-    name: '백엔드 엔지니어',
-    instructions:
-      'IT 회사의 시니어 백엔드 엔지니어로서 토론에 참여한다. NestJS·MikroORM·PostgreSQL 기반 서버 아키텍처와 API 설계에 전문성을 갖추고 있다. 기술적 타당성·성능 SLA·확장성 관점에서 의견을 제시하며, ADR(아키텍처 결정 기록) 근거로 설계 결정을 논증한다. 구현 비용과 유지보수 부담을 현실적으로 평가하고 cursor 기반 페이지네이션·UUID v7 등 구체적 기술 선택의 이유를 설명한다.',
-    description: '서버 아키텍처·API 설계·DB 스키마·성능/확장성 논의가 필요할 때 나선다.',
-  },
-  {
-    name: '프론트엔드 엔지니어',
-    instructions:
-      'IT 회사의 프론트엔드 엔지니어로서 토론에 참여한다. Next.js 14 App Router·shadcn/ui·TanStack Query 기반 UI 개발과 Core Web Vitals 최적화에 집중한다. Atomic Design 원칙과 접근성(WCAG 2.1 AA) 기준에서 컴포넌트 설계를 평가하며, 번들 크기·FCP·LCP 등 측정 가능한 지표로 성능 논의를 이끈다. 서버 컴포넌트와 클라이언트 컴포넌트 분리 원칙을 토론에서 명확히 짚는다.',
-    description: 'UI/UX·컴포넌트 설계·클라이언트 성능·접근성 논의가 필요할 때 나선다.',
-  },
-  {
-    name: '모바일 엔지니어',
-    instructions:
-      'IT 회사의 모바일 엔지니어로서 토론에 참여한다. React Native(New Architecture)·Expo EAS Build 기반으로 iOS·Android 앱을 개발한다. 앱스토어 심사 정책·OTA 업데이트·푸시 알림 권한 전략·앱 크래시 대응 절차에 밝다. 플랫폼별 차이(iOS Info.plist 권한 문구, Android targetSdkVersion 정책)를 구체적으로 짚고, 웹과 모바일 간 코드 공유 전략을 논의에서 대변한다.',
-    description: 'iOS/Android·앱스토어·푸시 알림·모바일 UX·OTA 업데이트 논의가 필요할 때 나선다.',
-  },
-  {
-    name: 'QA 엔지니어',
-    instructions:
-      'IT 회사의 QA 엔지니어로서 토론에 참여한다. 테스트 피라미드(단위 70%/통합 20%/E2E 10%) 전략과 릴리즈 게이트 기준 수립에 전문화되어 있다. 버그 심각도(P0~P3) 분류 기준으로 리스크를 정량화하고, 경계값·오프라인·다크모드 등 엣지 케이스를 발굴한다. 기능의 검증 가능성과 테스트 비용을 현실적으로 평가하며 Go/No-Go 판단에 객관적 근거를 제시한다.',
-    description: '품질 기준·테스트 전략·릴리즈 게이트·엣지 케이스 검증이 필요할 때 나선다.',
-  },
-  {
-    name: '인사팀 담당자',
-    instructions:
-      '회사 인사팀 담당자로서 토론에 참여한다. 채용 프로세스(서류→코딩테스트→기술면접→컬처핏→처우협의)·온보딩 30/60/90일 플랜·연 2회 성과 평가 제도(S/A/B/C 등급)를 운영한다. 복리후생(연차·재택·자기계발비)과 인력 계획(헤드카운트 조정, 직급 밴드)에 대한 현실적 제약을 논의에서 대변한다. 조직 문화와 직원 경험 관점에서 정책 변경의 영향을 평가한다.',
-    description: '채용·온보딩·성과평가·복리후생·인력 계획 논의가 필요할 때 나선다.',
-  },
-  {
-    name: '총무팀 담당자',
-    instructions:
-      '회사 총무팀 담당자로서 토론에 참여한다. 비품 구매 결재 프로세스(50만원 미만 팀장 결재·이상 대표 결재)·장비 관리 정책(지급 기준·교체 주기·반납 절차)·외부 벤더 계약 관리를 담당한다. 직원 복지 프로그램(동호회·건강검진·간식)과 사무환경 운영 현실을 논의에서 구체적으로 짚는다. 행정 처리 소요 시간과 규정 준수 요건을 이유로 무리한 요구에 현실적 한계를 제시한다.',
-    description: '사무환경·비품·시설관리·복지 프로그램·외부 벤더 계약 논의가 필요할 때 나선다.',
-  },
-  {
-    name: '회계팀 담당자',
-    instructions:
-      '회사 회계팀 담당자로서 토론에 참여한다. 경비 청구 절차(ERP 입력→팀장 승인→회계팀 검토→지급 10일/25일)·부서별 예산 편성 및 집행 현황·월말 결산 마감 일정을 운영한다. 세무(부가세·원천세·법인세) 신고 일정과 세금계산서 수취 기한 규정을 근거로 정책 변경의 세무 리스크를 평가한다. 비용 절감 목표와 예산 초과 시 승인 절차를 논의에서 명확히 제시한다.',
-    description: '예산·경비정산·재무보고·세무·원가절감 논의가 필요할 때 나선다.',
-  },
-  {
-    name: '마케팅 담당자',
-    instructions:
-      'B2B SaaS 회사의 마케팅 담당자로서 토론에 참여한다. 제품 출시 캠페인·고객 커뮤니케이션·Go-to-Market 전략을 담당한다. 배포 일정이 외부 공지·런치 캠페인·고객 이메일 발송 타이밍과 어떻게 연결되는지 논거로 제시한다. MQL·SQL·CAC·LTV 등 B2B 마케팅 지표를 근거로 기능 출시 우선순위를 평가하며, 고객 이탈 리스크와 브랜드 신뢰 훼손 관점에서 배포 결정의 비즈니스 임팩트를 대변한다.',
-    description: '출시 캠페인·고객 공지·마케팅 일정·Go-to-Market 논의가 필요할 때 나선다.',
-  },
-  {
-    name: '영업 담당자',
-    instructions:
-      'B2B SaaS 회사의 영업 담당자로서 토론에 참여한다. 고객 약속·계약 갱신 일정·엔터프라이즈 데모 스케줄을 대변한다. 배포 지연이나 기능 결함이 파이프라인 딜 클로징, 고객 SLA 위반, 계약 이탈로 이어지는 위험을 수치로 제시한다. ARR·Churn·NRR 지표를 근거로 배포 Go/No-Go 결정이 영업에 미치는 직접 영향을 논의에서 대변한다.',
-    description: '고객 약속·계약 갱신·영업 파이프라인·SLA 준수 논의가 필요할 때 나선다.',
-  },
-];
-
-const ROOMS: { name: string; agentNames: string[] }[] = [
-  {
-    name: '스프린트 계획 회의',
-    agentNames: ['PM', '백엔드 엔지니어', '프론트엔드 엔지니어', '모바일 엔지니어', 'QA 엔지니어'],
-  },
-  {
-    name: '기능 개발 리뷰',
-    agentNames: ['PM', '백엔드 엔지니어', '프론트엔드 엔지니어'],
-  },
-  {
-    name: '모바일 릴리즈 준비',
-    agentNames: ['모바일 엔지니어', 'QA 엔지니어', 'PM'],
-  },
-  {
-    name: '연간 예산 계획 회의',
-    agentNames: ['인사팀 담당자', '총무팀 담당자', '회계팀 담당자'],
-  },
-  {
-    name: '복지제도 개선 검토',
-    agentNames: ['인사팀 담당자', '총무팀 담당자'],
-  },
-  {
-    name: '경비 정산 프로세스 개선',
-    agentNames: ['총무팀 담당자', '회계팀 담당자'],
-  },
-  {
-    name: '배포 전 최종 점검 회의',
-    agentNames: ['PM', '백엔드 엔지니어', '프론트엔드 엔지니어', 'QA 엔지니어', '마케팅 담당자', '영업 담당자'],
-  },
-];
-
-const AGENT_KNOWLEDGE: Record<string, string> = {
-  PM: `# 제품 개발 운영 가이드 — PM
+    agentName: "PM",
+    filename: "pm-agent.md",
+    content: `# 제품 개발 운영 가이드 — PM
 
 ## 스프린트 계획 프로세스
 스프린트 주기: 2주 (월요일 시작, 금요일 스프린트 리뷰)
@@ -171,8 +76,11 @@ const AGENT_KNOWLEDGE: Record<string, string> = {
 - 주요 기능: RAG 문서 업로드 비동기 처리, 벡터 검색 API
 - 사전 공지 발송 완료: 2026-06-24(수) 18:00
 - Q3 로드맵 연계: 8월 iOS 베타 출시를 위한 RAG 백엔드 필수 선행 조건`,
-
-  '백엔드 엔지니어': `# 백엔드 기술 아키텍처 문서
+  },
+  {
+    agentName: "백엔드 엔지니어",
+    filename: "backend-engineer-agent.md",
+    content: `# 백엔드 기술 아키텍처 문서
 
 ## 기술 스택
 - Runtime: Node.js 22 LTS
@@ -250,8 +158,11 @@ const AGENT_KNOWLEDGE: Record<string, string> = {
 - API 응답시간: Datadog APM (P95 > 500ms → PagerDuty 알림)
 - 인프라: AWS CloudWatch (CPU > 70% → HPA 스케일 아웃)
 - 큐 상태: Bull Dashboard (내부망 admin.agent-discuss.internal/queues)`,
-
-  '프론트엔드 엔지니어': `# 프론트엔드 개발 가이드
+  },
+  {
+    agentName: "프론트엔드 엔지니어",
+    filename: "frontend-engineer-agent.md",
+    content: `# 프론트엔드 개발 가이드
 
 ## 기술 스택
 - Framework: Next.js 14 (App Router)
@@ -292,8 +203,11 @@ const AGENT_KNOWLEDGE: Record<string, string> = {
 - 컴포넌트명: PascalCase (ChatMessage)
 - CSS 클래스: Tailwind 유틸리티만 사용. 커스텀 CSS 파일 신규 생성 금지.
 - Context: 테마, 인증 정보처럼 트리 전체 필요한 경우만 사용`,
-
-  '모바일 엔지니어': `# 모바일 앱 개발 표준
+  },
+  {
+    agentName: "모바일 엔지니어",
+    filename: "mobile-engineer-agent.md",
+    content: `# 모바일 앱 개발 표준
 
 ## 기술 스택
 - Framework: React Native 0.74 (New Architecture 적용)
@@ -335,8 +249,11 @@ Android:
 - 웹과 공유 가능한 로직은 shared/ 패키지로 분리 (모노레포)
 - 플랫폼별 분기: Platform.select() 사용. .ios.tsx / .android.tsx 파일 분리 최소화.
 - 성능: FlatList 기본 사용. ScrollView에 대량 아이템 렌더링 금지.`,
-
-  'QA 엔지니어': `# QA 프로세스 및 품질 기준
+  },
+  {
+    agentName: "QA 엔지니어",
+    filename: "qa-engineer-agent.md",
+    content: `# QA 프로세스 및 품질 기준
 
 ## 테스트 피라미드 전략
 - 단위 테스트 (70%): Jest / 비즈니스 로직, 유틸리티 함수 / 커버리지 80% 이상 필수
@@ -416,8 +333,11 @@ Android:
 | E2E 핵심 시나리오 | 100% 통과 | ❌ 94% (6건 실패) |
 | 성능 회귀 | LCP 20% 이내 | ✅ 이상 없음 |
 | 보안 스캔 | Critical/High 0건 | ✅ 이상 없음 |`,
-
-  '인사팀 담당자': `# 인사 관리 정책 및 가이드
+  },
+  {
+    agentName: "인사팀 담당자",
+    filename: "hr-agent.md",
+    content: `# 인사 관리 정책 및 가이드
 
 ## 채용 프로세스
 단계: 서류 검토(3일) → 코딩 테스트(4일) → 1차 기술 면접 → 2차 컬처핏 면접(팀장+HR) → 처우 협의 → 합격 통보
@@ -451,8 +371,11 @@ Android:
 - 자기계발: 도서 구입비 월 3만원, 외부 교육비 연 50만원
 - 재택근무: 주 2회 허용 (팀 협의 후 지정일)
 - 헤드카운트 계획: 분기별 인력 수요 조사 후 연간 채용 계획 수립`,
-
-  '총무팀 담당자': `# 총무 행정 가이드
+  },
+  {
+    agentName: "총무팀 담당자",
+    filename: "general-affairs-agent.md",
+    content: `# 총무 행정 가이드
 
 ## 비품 및 물품 구매 절차
 - 50만원 미만: 팀장 결재 → 총무팀 발주 → 수령 확인
@@ -486,8 +409,54 @@ Android:
 - 회의실 예약: 사내 캘린더 > 회의실 예약 (최대 4시간)
 - 주차: 선착순 월 주차권 신청 (총무팀 > 주차 신청)
 - 택배: 층별 무인 택배함. 업무 관련 택배 수령 시 총무팀 사전 공지 필수.`,
+  },
+  {
+    agentName: "회계팀 담당자",
+    filename: "accounting-agent.md",
+    content: `# 재무 및 경비 처리 정책
 
-  '마케팅 담당자': `# B2B SaaS 마케팅 전략 및 운영 가이드
+## 경비 청구 절차
+1. 지출 발생 → 영수증/세금계산서 수취 (발행일로부터 15일 이내 제출)
+2. ERP 시스템 > 경비정산 메뉴 > 지출 항목 입력 + 증빙서류 첨부
+3. 팀장 온라인 승인 (2영업일 이내)
+4. 회계팀 검토 및 최종 승인 (3영업일 이내)
+5. 지급: 매월 10일 (전월 16일~말일 청구건) / 매월 25일 (당월 1일~15일 청구건)
+
+증빙서류 기준:
+- 3만원 이하: 간이영수증 가능
+- 3만원 초과: 세금계산서 또는 신용카드 매출전표 필수
+- 법인카드 사용 권장 (법인카드 미보유 팀은 개인카드 후 청구)
+
+## 예산 관리 원칙
+- 연간 예산: 11월 요청 → 12월 이사회 확정 → 1월 배정
+- 부서별 예산 집행 현황: ERP > 예산 관리 메뉴에서 실시간 조회 가능
+- 예산 초과 집행: 팀장 + CFO 사전 승인 필수. 사후 보고 불인정.
+- 예산 이월: 원칙적 불가. 불가피 시 12월 15일까지 CFO 신청.
+- 비용 절감 목표: 전년 대비 관리비 5% 절감 (달성 시 부서 인센티브)
+
+## 월말 결산 마감 일정
+- 영업일 1~3일: 전월 경비 마감 (이후 추가 접수 불가)
+- 영업일 3~5일: 부서별 예산 대비 실적 검토
+- 영업일 7일: 내부 월간 재무보고서 완성 (CEO/CFO 보고)
+- 10일: 경비 지급 (1차) / 25일: 경비 지급 (2차)
+
+## 법인카드 사용 정책
+- 발급 대상: 팀장 이상 또는 총무팀 협의 후 업무 필요자
+- 사용 가능: 업무 관련 식대, 교통비, 소모품, 복지비
+- 사용 불가: 개인 물품, 유흥비, 가족 동반 식비 전체, 현금서비스
+- 한도: 직급별 월 50~200만원 (CFO 승인 시 한시적 상향 가능)
+- 영수증 등록: 사용 후 3영업일 이내 ERP 입력 필수 (미입력 시 다음 달 사용 정지)
+
+## 세무 신고 일정
+- 부가세: 1기(1~6월) 7월 25일 / 2기(7~12월) 다음해 1월 25일
+- 원천세: 매월 10일 (급여 원천세, 사업소득 원천세)
+- 법인세: 사업연도 종료 후 3개월 내 (12월 결산법인 → 3월 31일)
+- 세금계산서 수취: 공급일로부터 익월 10일 이내 발행분만 매입세액 공제 가능`,
+  },
+  {
+    agentName: "마케팅 담당자",
+    filename: "marketing-agent.md",
+    content: `# B2B SaaS 마케팅 전략 및 운영 가이드
 
 ## 핵심 마케팅 지표 (KPI)
 - MQL(Marketing Qualified Lead): 월 150건 목표 (인바운드 콘텐츠 + 유료 광고)
@@ -527,8 +496,11 @@ Android:
 - 뉴스레터 발송 후 배포 취소: 기능을 써보려는 고객이 오류를 경험 → CS 인입 급증, 브랜드 신뢰 손상
 - 공지 없이 기능 미출시: 고객 혼선 → 구독 취소율 상승 (과거 사례: 공지 후 배포 취소 시 해당 주 구독 취소 2.3배 증가)
 - 캠페인 연기 비용: 유료 광고(LinkedIn) 게재 일정 변경 시 약 40만원 손실`,
-
-  '영업 담당자': `# B2B 영업 프로세스 및 고객 관리 가이드
+  },
+  {
+    agentName: "영업 담당자",
+    filename: "sales-agent.md",
+    content: `# B2B 영업 프로세스 및 고객 관리 가이드
 
 ## 핵심 영업 지표 (KPI)
 - ARR(연간 반복 매출): 현재 3.2억원, 분기 목표 4억원
@@ -570,113 +542,5 @@ Android:
 - 6월: 3건 갱신 예정 (B사 포함) — 이 달 ARR 기여 비중 높음
 - 7월: 5건 갱신 예정
 - 9월: 8건 갱신 예정 (최대 갱신 시즌)`,
-
-  '회계팀 담당자': `# 재무 및 경비 처리 정책
-
-## 경비 청구 절차
-1. 지출 발생 → 영수증/세금계산서 수취 (발행일로부터 15일 이내 제출)
-2. ERP 시스템 > 경비정산 메뉴 > 지출 항목 입력 + 증빙서류 첨부
-3. 팀장 온라인 승인 (2영업일 이내)
-4. 회계팀 검토 및 최종 승인 (3영업일 이내)
-5. 지급: 매월 10일 (전월 16일~말일 청구건) / 매월 25일 (당월 1일~15일 청구건)
-
-증빙서류 기준:
-- 3만원 이하: 간이영수증 가능
-- 3만원 초과: 세금계산서 또는 신용카드 매출전표 필수
-- 법인카드 사용 권장 (법인카드 미보유 팀은 개인카드 후 청구)
-
-## 예산 관리 원칙
-- 연간 예산: 11월 요청 → 12월 이사회 확정 → 1월 배정
-- 부서별 예산 집행 현황: ERP > 예산 관리 메뉴에서 실시간 조회 가능
-- 예산 초과 집행: 팀장 + CFO 사전 승인 필수. 사후 보고 불인정.
-- 예산 이월: 원칙적 불가. 불가피 시 12월 15일까지 CFO 신청.
-- 비용 절감 목표: 전년 대비 관리비 5% 절감 (달성 시 부서 인센티브)
-
-## 월말 결산 마감 일정
-- 영업일 1~3일: 전월 경비 마감 (이후 추가 접수 불가)
-- 영업일 3~5일: 부서별 예산 대비 실적 검토
-- 영업일 7일: 내부 월간 재무보고서 완성 (CEO/CFO 보고)
-- 10일: 경비 지급 (1차) / 25일: 경비 지급 (2차)
-
-## 법인카드 사용 정책
-- 발급 대상: 팀장 이상 또는 총무팀 협의 후 업무 필요자
-- 사용 가능: 업무 관련 식대, 교통비, 소모품, 복지비
-- 사용 불가: 개인 물품, 유흥비, 가족 동반 식비 전체, 현금서비스
-- 한도: 직급별 월 50~200만원 (CFO 승인 시 한시적 상향 가능)
-- 영수증 등록: 사용 후 3영업일 이내 ERP 입력 필수 (미입력 시 다음 달 사용 정지)
-
-## 세무 신고 일정
-- 부가세: 1기(1~6월) 7월 25일 / 2기(7~12월) 다음해 1월 25일
-- 원천세: 매월 10일 (급여 원천세, 사업소득 원천세)
-- 법인세: 사업연도 종료 후 3개월 내 (12월 결산법인 → 3월 31일)
-- 세금계산서 수취: 공급일로부터 익월 10일 이내 발행분만 매입세액 공제 가능`,
-};
-
-@Injectable()
-export class SeedService implements OnApplicationBootstrap {
-  private readonly logger = new Logger(SeedService.name);
-
-  constructor(
-    @InjectRepository(User) private readonly userRepository: EntityRepository<User>,
-    @InjectRepository(Workspace) private readonly workspaceRepository: EntityRepository<Workspace>,
-    @InjectRepository(WorkspaceMember)
-    private readonly memberRepository: EntityRepository<WorkspaceMember>,
-    @InjectRepository(Agent) private readonly agentRepository: EntityRepository<Agent>,
-    @InjectRepository(Room) private readonly roomRepository: EntityRepository<Room>,
-    @InjectRepository(RoomAgent) private readonly roomAgentRepository: EntityRepository<RoomAgent>,
-    private readonly rag: RagService,
-  ) {}
-
-  async onApplicationBootstrap(): Promise<void> {
-    const em = this.userRepository.getEntityManager();
-
-    const existing = await this.userRepository.findOne({ email: SEED_EMAIL });
-    if (existing) {
-      this.logger.log(`seed skipped — user: ${SEED_EMAIL}`);
-      return;
-    }
-
-    const user = this.userRepository.create({ email: SEED_EMAIL });
-    const workspace = this.workspaceRepository.create({ name: SEED_WORKSPACE, ownerUserId: user.id });
-    this.memberRepository.create({ workspaceId: workspace.id, userId: user.id, role: 'owner' });
-
-    const agentMap = new Map<string, Agent>();
-    for (const spec of AGENTS) {
-      const agent = this.agentRepository.create({
-        workspaceId: workspace.id,
-        name: spec.name,
-        instructions: spec.instructions,
-        model: DEFAULT_MODEL,
-        description: spec.description,
-      });
-      agentMap.set(spec.name, agent);
-    }
-
-    for (const roomSpec of ROOMS) {
-      const room = this.roomRepository.create({ workspaceId: workspace.id, name: roomSpec.name });
-      for (const agentName of roomSpec.agentNames) {
-        const agent = agentMap.get(agentName);
-        if (agent) {
-          this.roomAgentRepository.create({ roomId: room.id, agentId: agent.id });
-        }
-      }
-    }
-
-    await em.flush();
-    this.logger.log(`seed complete — user: ${SEED_EMAIL}, workspace: ${SEED_WORKSPACE}`);
-
-    if (process.env.NODE_ENV === 'test') {
-      this.logger.log('test env — skipping RAG document indexing');
-      return;
-    }
-
-    for (const spec of AGENTS) {
-      const agent = agentMap.get(spec.name);
-      const knowledge = AGENT_KNOWLEDGE[spec.name];
-      if (agent && knowledge) {
-        void this.rag.ingestText(agent.id, knowledge);
-      }
-    }
-    this.logger.log(`RAG indexing started — 8 agents processing in background`);
-  }
-}
+  },
+];
