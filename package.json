@@ -13,6 +13,8 @@
     "build": "npm -w apps/be run build",
     "build:fe": "npm -w apps/fe run build",
     "start": "npm -w apps/be run start",
+    "db-init": "npm -w apps/be run db-init",
+    "rag-init": "npm -w apps/be run rag-init",
     "lint": "npm -w apps/be run lint",
     "test": "npm -w apps/be run test",
     "test:e2e": "npm -w apps/be run test:e2e",
