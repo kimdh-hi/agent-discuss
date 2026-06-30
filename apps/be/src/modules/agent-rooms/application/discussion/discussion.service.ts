@@ -1,6 +1,11 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { END, START, StateGraph } from '@langchain/langgraph';
+import type { BaseCheckpointSaver, BaseStore } from '@langchain/langgraph-checkpoint';
 import { ReplaySubject } from 'rxjs';
+import {
+  LANGGRAPH_CHECKPOINTER,
+  LANGGRAPH_STORE,
+} from '../../../agent-memory/infrastructure/langgraph/langgraph-persistence.tokens';
 import type { RoomAgentSpec, RoomEvent, TurnEntry, DiscussionSnapshot, DiscussionRunOptions } from './discussion.types';
 import type { RunContext } from './run-context';
 import type { RagService } from '../../../rag/application/rag.service';
@@ -26,6 +31,8 @@ export class DiscussionService {
     private readonly turnService: TurnService,
     private readonly routingService: RoutingService,
     private readonly conclusionWriterService: ConclusionWriterService,
+    @Inject(LANGGRAPH_CHECKPOINTER) private readonly checkpointer: BaseCheckpointSaver,
+    @Inject(LANGGRAPH_STORE) private readonly store: BaseStore,
   ) {}
 
   async run(
@@ -66,22 +73,33 @@ export class DiscussionService {
       skipGate: options.skipGate ?? false,
       maxTurns,
       keepTurns,
+      agentMemories: options.agentMemories ?? {},
     };
 
     const graph = this.buildGraph(ctx);
+    const threadId = options.threadId;
+    const runnableConfig = {
+      recursionLimit: graphRecursionLimit,
+      ...(threadId ? { configurable: { thread_id: threadId } } : {}),
+    };
 
     const completion = (async (): Promise<{ turnLog: TurnEntry[]; snapshot: DiscussionSnapshot }> => {
       try {
         subject.next({ type: 'status', phase: 'starting' });
-        const initialState = initialGraphState({
-          initialTurnLog,
-          historySummary: options.historySummary ?? '',
-          initialTurn,
-          snapshot: snap,
-        });
-        const result = await graph.invoke(initialState, { recursionLimit: graphRecursionLimit }) as Record<string, unknown>;
+        const priorTurnLog = await this.loadCheckpointTurnLog(graph, runnableConfig, threadId);
+        const hasCheckpoint = priorTurnLog !== null;
+        const baseTurnLogLen = hasCheckpoint ? priorTurnLog.length : initialTurnLog.length;
+        const input = hasCheckpoint
+          ? {}
+          : initialGraphState({
+              initialTurnLog,
+              historySummary: options.historySummary ?? '',
+              initialTurn,
+              snapshot: snap,
+            });
+        const result = await graph.invoke(input, runnableConfig) as Record<string, unknown>;
         const fullTurnLog = (result['turnLog'] as TurnEntry[]) ?? [];
-        const turnLog = fullTurnLog.slice(initialTurnLog.length);
+        const turnLog = fullTurnLog.slice(baseTurnLogLen);
         const snapshot = snapshotFromGraphResult(result);
         return { turnLog, snapshot };
       } catch (err) {
@@ -103,6 +121,22 @@ export class DiscussionService {
     return { subject, completion };
   }
 
+  private async loadCheckpointTurnLog(
+    graph: ReturnType<DiscussionService['buildGraph']>,
+    config: { configurable?: { thread_id: string } },
+    threadId?: string,
+  ): Promise<TurnEntry[] | null> {
+    if (!threadId) return null;
+    try {
+      const snapshot = await graph.getState(config);
+      const values = snapshot?.values as Record<string, unknown> | undefined;
+      const turnLog = values?.['turnLog'];
+      return Array.isArray(turnLog) ? (turnLog as TurnEntry[]) : null;
+    } catch {
+      return null;
+    }
+  }
+
   private buildGraph(ctx: RunContext) {
     return new StateGraph(DiscussionState)
       .addNode('validateTopic', () => validateTopic(ctx), { ends: ['defineAgenda', 'rejectTopic'] })
@@ -118,6 +152,6 @@ export class DiscussionService {
       .addEdge('defineAgenda', 'moderate')
       .addEdge('updateIssues', 'compactHistory')
       .addEdge('compactHistory', 'moderate')
-      .compile();
+      .compile({ checkpointer: this.checkpointer, store: this.store });
   }
 }

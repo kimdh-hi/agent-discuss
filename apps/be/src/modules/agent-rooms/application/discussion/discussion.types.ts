@@ -41,12 +41,14 @@ export interface TurnEntry {
 }
 
 export interface DiscussionRunOptions {
+  threadId?: string;
   initialTurnLog?: TurnEntry[];
   historySummary?: string;
   initialTurn?: number;
   skipGate?: boolean;
   signal?: AbortSignal;
   initialSnapshot?: DiscussionSnapshot;
+  agentMemories?: Record<string, string[]>;
 }
 
 export type RoomEvent =

@@ -39,6 +39,16 @@ function renderSpeakerBrief(brief: DiscussionBrief | null, agentId: string): str
 - 내 assignedContribution: ${contribution}`;
 }
 
+function renderSpeakerMemories(memories: string[]): string {
+  if (!memories || memories.length === 0) return '';
+  const list = memories.map((m) => `- ${m}`).join('\n');
+  return `
+
+## 장기 기억 (과거 토론에서 축적)
+${list}
+참고용이며 이번 토픽과 무관하면 무시하세요. 그대로 복창하지 말고 새 기여에만 활용하세요.`;
+}
+
 function renderModeratorBrief(brief: DiscussionBrief | null): string {
   if (!brief) return '';
   const rolePlan = brief.rolePlan
@@ -131,6 +141,7 @@ export function buildSpeakSystemPrompt(
   decisionCandidate: DecisionCandidate | null = null,
   convergePressureHint: string = '',
   brief: DiscussionBrief | null = null,
+  memories: string[] = [],
 ): string {
   const discussionState = renderSpeakDiscussionState({
     issues,
@@ -139,9 +150,10 @@ export function buildSpeakSystemPrompt(
     convergePressureHint,
   });
   const assignment = renderSpeakerBrief(brief, agent.id);
+  const memorySection = renderSpeakerMemories(memories);
 
   return `당신은 "${agent.name}" 역할의 AI 에이전트입니다.
-역할 지침: ${agent.instructions}
+역할 지침: ${agent.instructions}${memorySection}
 
 토론 주제: "${topic}"
 ${assignment}

@@ -17,6 +17,7 @@ export interface RunContext {
   skipGate: boolean;
   maxTurns: number;
   keepTurns: number;
+  agentMemories?: Record<string, string[]>;
 }
 
 export function isAborted(ctx: RunContext, state?: { aborted?: boolean }): boolean {

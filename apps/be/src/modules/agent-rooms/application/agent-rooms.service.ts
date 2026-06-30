@@ -6,6 +6,7 @@ import { ErrorCode } from '../../../common/errors/error-code';
 import { Agent, Room, RoomAgent, RoomTopic, RoomTopicMessage } from '../../../common/database/entities.registry';
 import { LlmService } from '../../../common/ai/llm/llm.service';
 import { RagService } from '../../rag/application/rag.service';
+import { AgentMemoryService } from '../../agent-memory/application/agent-memory.service';
 import { Observable } from 'rxjs';
 import { DiscussionService } from './discussion/discussion.service';
 import { DiscussionHubService } from './discussion/discussion-hub.service';
@@ -51,6 +52,7 @@ export class AgentRoomsService {
     private readonly hub: DiscussionHubService,
     private readonly llm: LlmService,
     private readonly rag: RagService,
+    private readonly agentMemory: AgentMemoryService,
   ) {}
 
   async create(workspaceId: string, name: string, agentIds: string[]): Promise<Room> {
@@ -173,12 +175,15 @@ export class AgentRoomsService {
     const restoredSnapshot = topic.runState ?? null;
     const historySummary = this.buildContinuationSummary(topic, previousMessages, restoredSnapshot);
 
+    const agentMemories = await this.recallAgentMemories(specs, message);
+
     startRoomTopicRun(topic);
     this.messageRepository.create({ topicId: topic.id, role: 'user', content: message });
     await this.messageRepository.getEntityManager().flush();
 
     const controller = new AbortController();
     const { subject, completion } = await this.discussion.run(message, specs, {
+      threadId: topic.id,
       llm: this.llm,
       ragService: this.rag,
       initialTurnLog,
@@ -187,10 +192,11 @@ export class AgentRoomsService {
       skipGate: initialTurnLog.length > 0,
       signal: controller.signal,
       initialSnapshot: restoredSnapshot ?? undefined,
+      agentMemories,
     });
 
     const completionPromise = completion
-      .then(({ turnLog, snapshot }) => this.completeTopic(topic, turnLog, snapshot))
+      .then(({ turnLog, snapshot }) => this.completeTopic(topic, specs, turnLog, snapshot))
       .catch(async (err) => {
         this.logger.error(`Discussion completion failed: ${(err as Error).message}`);
         markRoomTopicFailed(topic);
@@ -199,6 +205,20 @@ export class AgentRoomsService {
       });
     this.hub.register(topic.id, subject, completionPromise, controller);
     return { topic };
+  }
+
+  private async recallAgentMemories(
+    specs: RoomAgentSpec[],
+    query: string,
+  ): Promise<Record<string, string[]>> {
+    const entries = await Promise.all(
+      specs.map(async (spec) => [spec.id, await this.agentMemory.recall(spec.id, query)] as const),
+    );
+    const result: Record<string, string[]> = {};
+    for (const [id, memories] of entries) {
+      if (memories.length > 0) result[id] = memories;
+    }
+    return result;
   }
 
   private agentHasKnowledge(agent: Agent): boolean {
@@ -224,6 +244,7 @@ export class AgentRoomsService {
 
   private async completeTopic(
     topic: RoomTopic,
+    specs: RoomAgentSpec[],
     entries: TurnEntry[],
     snapshot: DiscussionSnapshot,
   ): Promise<void> {
@@ -242,6 +263,8 @@ export class AgentRoomsService {
     completeRoomTopic(topic, finalEntry?.content ?? null);
     saveRoomTopicState(topic, snapshot);
     await this.messageRepository.getEntityManager().flush();
+
+    await this.agentMemory.captureFromDiscussion(specs, topic.title, topic.id, entries, snapshot);
   }
 
   private toTurnEntries(messages: RoomTopicMessage[], agents: RoomAgentSpec[]): TurnEntry[] {

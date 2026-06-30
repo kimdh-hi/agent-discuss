@@ -37,15 +37,19 @@ function makeService() {
 
   const capturedNodes: Record<string, (s: unknown) => unknown> = {};
   const mockInvoke = jest.fn().mockResolvedValue({ turnLog: [] });
+  const mockGetState = jest.fn().mockResolvedValue({ values: {} });
   const mockInstance = {
     addNode: jest.fn().mockImplementation((name: string, fn: (s: unknown) => unknown) => {
       capturedNodes[name] = fn;
       return mockInstance;
     }),
     addEdge: jest.fn().mockReturnThis(),
-    compile: jest.fn().mockReturnValue({ invoke: mockInvoke }),
+    compile: jest.fn().mockReturnValue({ invoke: mockInvoke, getState: mockGetState }),
   };
   (StateGraph as jest.Mock).mockImplementation(() => mockInstance);
+
+  const checkpointer = { getTuple: jest.fn(), put: jest.fn() };
+  const store = { search: jest.fn(), put: jest.fn(), get: jest.fn() };
 
   const turnService = {
     speak: jest.fn(),
@@ -64,9 +68,12 @@ function makeService() {
       turnService as never,
       routingService as never,
       conclusionWriterService as never,
+      checkpointer as never,
+      store as never,
     ),
     capturedNodes,
     mockInvoke,
+    mockGetState,
     mockInstance,
     turnService,
     routingService,
@@ -419,6 +426,48 @@ describe('DiscussionService', () => {
       expect(snapshot.discussionType).toBe('brainstorm');
       expect(snapshot.options).toEqual([]);
       expect(snapshot.turn).toBe(0);
+    });
+
+    it('체크포인트가 있으면 빈 입력으로 invoke하고 체크포인트 turnLog 이후만 반환한다', async () => {
+      const { service, mockInvoke, mockGetState } = makeService();
+      const checkpointLog = [
+        { role: 'agent' as const, agentId: 'a1', agentName: 'PM', round: 1, content: '체크포인트 발언1' },
+        { role: 'moderator' as const, agentName: '진행자', round: 1, content: '체크포인트 결론' },
+      ];
+      const newEntry = { role: 'agent' as const, agentId: 'a2', agentName: '개발자', round: 2, content: '재개 후 새 발언' };
+      mockGetState.mockResolvedValueOnce({ values: { turnLog: checkpointLog } });
+      mockInvoke.mockResolvedValueOnce({ turnLog: [...checkpointLog, newEntry], turn: 2 });
+
+      const result = await service.run('테스트', mockAgents, {
+        llm: mockLlm as never,
+        ragService: mockRagService as never,
+        threadId: 'topic-1',
+        initialTurnLog: [],
+      });
+
+      const { turnLog } = await result.completion;
+      expect(turnLog).toEqual([newEntry]);
+      const invokeArg = mockInvoke.mock.calls[0]?.[0] as Record<string, unknown>;
+      expect(invokeArg).toEqual({});
+      const invokeConfig = mockInvoke.mock.calls[0]?.[1] as { configurable?: { thread_id?: string } };
+      expect(invokeConfig.configurable?.thread_id).toBe('topic-1');
+    });
+
+    it('threadId가 있어도 체크포인트가 없으면 시드 경로(initialGraphState)로 invoke한다', async () => {
+      const { service, mockInvoke, mockGetState } = makeService();
+      mockGetState.mockResolvedValueOnce({ values: {} });
+      mockInvoke.mockResolvedValueOnce({ turnLog: [], historySummary: '' });
+
+      const result = await service.run('테스트', mockAgents, {
+        llm: mockLlm as never,
+        ragService: mockRagService as never,
+        threadId: 'legacy-topic',
+        historySummary: '레거시 요약',
+      });
+      await result.completion;
+
+      const invokeArg = mockInvoke.mock.calls[0]?.[0] as Record<string, unknown>;
+      expect(invokeArg['historySummary']).toBe('레거시 요약');
     });
 
     it('에러 폴백 시 initialSnapshot이 있으면 그 값을 사용한다', async () => {

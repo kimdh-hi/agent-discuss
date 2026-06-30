@@ -34,6 +34,7 @@ export async function speak(
     state.decisionCandidate,
     convergePressureHint,
     state.brief,
+    ctx.agentMemories?.[agent.id] ?? [],
   );
   const contextMessages = buildDiscussionMessages(
     state.turnLog,

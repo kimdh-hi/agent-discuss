@@ -8,6 +8,7 @@ import { RagModule } from './modules/rag/rag.module';
 import { WorkspacesModule } from './modules/workspaces/workspaces.module';
 import { AgentsModule } from './modules/agents/agents.module';
 import { AgentRoomsModule } from './modules/agent-rooms/agent-rooms.module';
+import { AgentMemoryModule } from './modules/agent-memory/agent-memory.module';
 
 @Module({
   imports: [
@@ -17,6 +18,7 @@ import { AgentRoomsModule } from './modules/agent-rooms/agent-rooms.module';
     AuthModule,
     LlmModule,
     RagModule,
+    AgentMemoryModule,
     WorkspacesModule,
     AgentsModule,
     AgentRoomsModule,
