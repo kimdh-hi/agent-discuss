@@ -30,8 +30,11 @@ export interface AgentMemory {
   id: string;
   agentId: string;
   content: string;
+  kind: string | null;
+  confidence: number | null;
   sourceTopicId: string | null;
   createdAt: string | null;
+  expiresAt: string | null;
 }
 
 export interface Room {
@@ -74,6 +77,8 @@ export interface ToolCall {
 export interface SourceHit {
   filename: string;
   score: number;
+  content?: string;
+  snippet?: string;
 }
 
 export interface ChatMessage {

@@ -65,6 +65,15 @@ export async function apiUpload<T = unknown>(
   return res.json() as Promise<T>;
 }
 
+export async function apiBlob(path: string): Promise<{ blob: Blob; filename: string }> {
+  const res = await fetch(`${BASE}${path}`, { headers: authHeaders() });
+  if (!res.ok) return handleError(res);
+  const disposition = res.headers.get('Content-Disposition') ?? '';
+  const match = disposition.match(/filename\*=UTF-8''([^;]+)/i);
+  const filename = match ? decodeURIComponent(match[1]) : 'download';
+  return { blob: await res.blob(), filename };
+}
+
 export async function apiStream(
   path: string,
   body: unknown,

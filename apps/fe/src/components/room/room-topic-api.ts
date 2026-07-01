@@ -1,4 +1,4 @@
-import { apiFetch, apiStream, apiStreamGet } from '../../lib/api';
+import { apiBlob, apiFetch, apiStream, apiStreamGet } from '../../lib/api';
 import type { RoomTopic } from '../../lib/types';
 
 export function createTopic(roomId: string, title: string): Promise<RoomTopic> {
@@ -33,4 +33,16 @@ export function cancelTopic(roomId: string, topicId: string): Promise<{ ok: bool
   return apiFetch<{ ok: boolean }>(`/rooms/${roomId}/topics/${topicId}/cancel`, {
     method: 'POST',
   });
+}
+
+export async function downloadTopic(roomId: string, topicId: string): Promise<void> {
+  const { blob, filename } = await apiBlob(`/rooms/${roomId}/topics/${topicId}/download`);
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = filename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
 }

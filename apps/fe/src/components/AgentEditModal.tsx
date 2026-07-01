@@ -16,6 +16,18 @@ function formatMemoryDate(value: string | null): string {
   return Number.isNaN(date.getTime()) ? '' : date.toLocaleString();
 }
 
+const MEMORY_KIND_LABEL: Record<string, string> = {
+  judgment_criterion: '판단 기준',
+  verification_rule: '검증 규칙',
+  decision_preference: '의사결정 선호',
+  role_constraint: '역할 제약',
+};
+
+function memoryKindLabel(kind: string | null): string {
+  if (!kind) return '';
+  return MEMORY_KIND_LABEL[kind] ?? kind;
+}
+
 const STATUS_LABEL: Record<string, string> = {
   processing: '처리 중',
   ready: '완료',
@@ -318,6 +330,20 @@ export default function AgentEditModal({ agent, onClose, onUpdated }: Props) {
                       key={memory.id}
                       className="rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2"
                     >
+                      {(memory.kind || typeof memory.confidence === 'number') && (
+                        <div className="mb-1.5 flex flex-wrap items-center gap-1">
+                          {memory.kind && (
+                            <span className="rounded-full bg-zinc-700/70 px-2 py-0.5 text-[10px] font-medium text-zinc-300">
+                              {memoryKindLabel(memory.kind)}
+                            </span>
+                          )}
+                          {typeof memory.confidence === 'number' && (
+                            <span className="rounded-full border border-zinc-700 px-2 py-0.5 text-[10px] text-zinc-400">
+                              신뢰도 {Math.round(memory.confidence * 100)}%
+                            </span>
+                          )}
+                        </div>
+                      )}
                       <p className="whitespace-pre-wrap text-sm text-zinc-200">{memory.content}</p>
                       {formatMemoryDate(memory.createdAt) && (
                         <p className="mt-1 text-[11px] text-zinc-500">

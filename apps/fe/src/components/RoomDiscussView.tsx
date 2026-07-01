@@ -12,7 +12,7 @@ import {
 } from './room/room-runtime-store';
 import { initialRoomState, toDisplayItems } from './room/room-state';
 import { useRoomTypewriterState } from './room/room-typewriter';
-import { cancelTopic } from './room/room-topic-api';
+import { cancelTopic, downloadTopic } from './room/room-topic-api';
 import { matchRoomCommands, parseRoomCommand } from './room/parse-room-command';
 
 interface Props {
@@ -50,7 +50,12 @@ function formatTopicTime(value: string): string {
 
 function toSourceHits(hits?: SearchHit[]): SourceHit[] | undefined {
   if (!hits) return undefined;
-  return hits.map((h) => ({ filename: h.filename, score: h.score }));
+  return hits.map((h) => ({
+    filename: h.filename,
+    score: h.score,
+    content: h.content,
+    snippet: h.snippet,
+  }));
 }
 
 export default function RoomDiscussView({ room }: Props) {
@@ -59,8 +64,26 @@ export default function RoomDiscussView({ room }: Props) {
   const [selectedTopic, setSelectedTopic] = useState<RoomTopic | null>(null);
   const [input, setInput] = useState('');
   const [loadingTopic, setLoadingTopic] = useState(false);
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  const [copiedId, setCopiedId] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const agentColorMap = useRef<Map<string, string>>(new Map());
+
+  const toggleCollapse = useCallback((id: string) => {
+    setCollapsed((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+
+  const copyText = useCallback((id: string, text: string) => {
+    void navigator.clipboard?.writeText(text).then(() => {
+      setCopiedId(id);
+      window.setTimeout(() => setCopiedId((cur) => (cur === id ? null : cur)), 1500);
+    });
+  }, []);
 
   const activeKey = selectedTopic ? selectedTopic.id : pendingTopicKey(room.id);
 
@@ -350,7 +373,27 @@ export default function RoomDiscussView({ room }: Props) {
                   </p>
                 ) : item.kind === 'final' ? (
                   <div key={item.id} className="rounded-lg border border-emerald-800 bg-emerald-950/40 px-4 py-3">
-                    <p className="mb-2 text-xs font-semibold text-emerald-400">합의 · 결론</p>
+                    <div className="mb-2 flex items-center justify-between gap-2">
+                      <p className="text-xs font-semibold text-emerald-400">합의 · 결론</p>
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          className="rounded px-1.5 py-0.5 text-[11px] text-zinc-400 transition hover:bg-zinc-700/60 hover:text-zinc-200"
+                          onClick={() => copyText(item.id, item.text)}
+                        >
+                          {copiedId === item.id ? '복사됨' : '복사'}
+                        </button>
+                        {selectedTopic && (
+                          <button
+                            type="button"
+                            className="rounded px-1.5 py-0.5 text-[11px] text-zinc-400 transition hover:bg-zinc-700/60 hover:text-zinc-200"
+                            onClick={() => void downloadTopic(room.id, selectedTopic.id).catch(() => {})}
+                          >
+                            다운로드
+                          </button>
+                        )}
+                      </div>
+                    </div>
                     <div className="prose text-sm text-zinc-200">
                       <ReactMarkdown remarkPlugins={[remarkGfm]}>{item.text}</ReactMarkdown>
                     </div>
@@ -367,20 +410,43 @@ export default function RoomDiscussView({ room }: Props) {
                           T{item.round}
                         </span>
                       )}
+                      {item.content && (
+                        <div className="ml-auto flex items-center gap-1">
+                          <button
+                            type="button"
+                            className="rounded px-1.5 py-0.5 text-[11px] text-zinc-500 transition hover:bg-zinc-700/60 hover:text-zinc-300"
+                            onClick={() => copyText(item.id, item.content)}
+                          >
+                            {copiedId === item.id ? '복사됨' : '복사'}
+                          </button>
+                          <button
+                            type="button"
+                            className="rounded px-1.5 py-0.5 text-[11px] text-zinc-500 transition hover:bg-zinc-700/60 hover:text-zinc-300"
+                            onClick={() => toggleCollapse(item.id)}
+                          >
+                            {collapsed.has(item.id) ? '펼치기' : '접기'}
+                          </button>
+                        </div>
+                      )}
                     </div>
                     {item.content ? (
-                      <div className="prose text-sm text-zinc-300">
-                        <ReactMarkdown remarkPlugins={[remarkGfm]}>{item.content}</ReactMarkdown>
-                      </div>
+                      collapsed.has(item.id) ? (
+                        <p className="truncate text-xs text-zinc-500">{item.content}</p>
+                      ) : (
+                        <div className="prose text-sm text-zinc-300">
+                          <ReactMarkdown remarkPlugins={[remarkGfm]}>{item.content}</ReactMarkdown>
+                        </div>
+                      )
                     ) : (
                       <p className="animate-pulse text-xs text-zinc-500">생성 중…</p>
                     )}
-                    {((item.toolCalls && item.toolCalls.length > 0) ||
-                      (item.sources && item.sources.length > 0)) && (
-                      <div className="mt-2">
-                        <MessageMeta toolCalls={item.toolCalls} sources={toSourceHits(item.sources)} />
-                      </div>
-                    )}
+                    {!collapsed.has(item.id) &&
+                      ((item.toolCalls && item.toolCalls.length > 0) ||
+                        (item.sources && item.sources.length > 0)) && (
+                        <div className="mt-2">
+                          <MessageMeta toolCalls={item.toolCalls} sources={toSourceHits(item.sources)} />
+                        </div>
+                      )}
                   </div>
                 ),
               )}
