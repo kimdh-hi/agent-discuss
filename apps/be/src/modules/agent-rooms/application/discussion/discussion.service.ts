@@ -68,6 +68,7 @@ export class DiscussionService {
       signal,
       llm: options.llm,
       ragService: options.ragService,
+      ragCache: options.ragCache,
       config,
       initialTurn,
       skipGate: options.skipGate ?? false,

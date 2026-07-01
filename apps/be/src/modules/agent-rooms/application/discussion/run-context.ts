@@ -2,7 +2,8 @@ import { Command } from '@langchain/langgraph';
 import { Subject } from 'rxjs';
 import type { RagService } from '../../../rag/application/rag.service';
 import type { LlmService } from '../../../../common/ai/llm/llm.service';
-import type { RoomAgentSpec, RoomEvent } from './discussion.types';
+import type { CachePort } from '../../../../common/cache/cache.port';
+import type { RoomAgentSpec, RoomEvent, RecalledMemory } from './discussion.types';
 import type { DiscussionConfig } from './discussion-config';
 
 export interface RunContext {
@@ -12,12 +13,13 @@ export interface RunContext {
   signal: AbortSignal;
   llm: LlmService;
   ragService: RagService;
+  ragCache?: CachePort;
   config: DiscussionConfig;
   initialTurn: number;
   skipGate: boolean;
   maxTurns: number;
   keepTurns: number;
-  agentMemories?: Record<string, string[]>;
+  agentMemories?: Record<string, RecalledMemory[]>;
 }
 
 export function isAborted(ctx: RunContext, state?: { aborted?: boolean }): boolean {

@@ -5,6 +5,7 @@ import type {
   DiscussionType,
   DecisionCandidate,
   DiscussionBrief,
+  RecalledMemory,
 } from '../../modules/agent-rooms/application/discussion/discussion.types';
 import { DISCUSSION_LIMITS } from '../../modules/agent-rooms/application/discussion/discussion-limits';
 import {
@@ -39,9 +40,11 @@ function renderSpeakerBrief(brief: DiscussionBrief | null, agentId: string): str
 - 내 assignedContribution: ${contribution}`;
 }
 
-function renderSpeakerMemories(memories: string[]): string {
+function renderSpeakerMemories(memories: RecalledMemory[]): string {
   if (!memories || memories.length === 0) return '';
-  const list = memories.map((m) => `- ${m}`).join('\n');
+  const list = memories
+    .map((m) => `- (${m.kind}, confidence ${m.confidence.toFixed(2)}) ${m.content}`)
+    .join('\n');
   return `
 
 ## 장기 기억 (과거 토론에서 축적)
@@ -141,7 +144,7 @@ export function buildSpeakSystemPrompt(
   decisionCandidate: DecisionCandidate | null = null,
   convergePressureHint: string = '',
   brief: DiscussionBrief | null = null,
-  memories: string[] = [],
+  memories: RecalledMemory[] = [],
 ): string {
   const discussionState = renderSpeakDiscussionState({
     issues,

@@ -1,4 +1,5 @@
 import type { SearchHit } from '../../../rag/application/rag.interfaces';
+import type { CachePort } from '../../../../common/cache/cache.port';
 export {
   openIssues,
   unresolvedInconsistencies,
@@ -40,6 +41,12 @@ export interface TurnEntry {
   content: string;
 }
 
+export interface RecalledMemory {
+  content: string;
+  kind: string;
+  confidence: number;
+}
+
 export interface DiscussionRunOptions {
   threadId?: string;
   initialTurnLog?: TurnEntry[];
@@ -48,7 +55,8 @@ export interface DiscussionRunOptions {
   skipGate?: boolean;
   signal?: AbortSignal;
   initialSnapshot?: DiscussionSnapshot;
-  agentMemories?: Record<string, string[]>;
+  agentMemories?: Record<string, RecalledMemory[]>;
+  ragCache?: CachePort;
 }
 
 export type RoomEvent =

@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { MikroOrmModule } from '@mikro-orm/nestjs';
 import { buildOrmConfig, buildRagOrmConfig } from './common/database/orm.config';
+import { CacheModule } from './common/cache/cache.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { LlmModule } from './common/ai/llm/llm.module';
 import { RagModule } from './modules/rag/rag.module';
@@ -15,6 +16,7 @@ import { AgentMemoryModule } from './modules/agent-memory/agent-memory.module';
     ConfigModule.forRoot({ isGlobal: true }),
     MikroOrmModule.forRoot(buildOrmConfig()),
     MikroOrmModule.forRoot({ ...buildRagOrmConfig(), contextName: 'rag' }),
+    CacheModule,
     AuthModule,
     LlmModule,
     RagModule,

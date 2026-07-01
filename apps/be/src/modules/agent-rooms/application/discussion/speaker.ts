@@ -47,7 +47,7 @@ export async function speak(
 
   const tools: LlmTool[] = [];
   if (agent.hasKnowledge) {
-    tools.push(buildAgentRagTool(ctx.ragService, agent.knowledgeScope ?? agent.id));
+    tools.push(buildAgentRagTool(ctx.ragService, agent.knowledgeScope ?? agent.id, ctx.ragCache));
   }
 
   let emittedTurn = false;

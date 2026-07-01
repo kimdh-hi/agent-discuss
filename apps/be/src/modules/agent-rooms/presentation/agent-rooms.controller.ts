@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Post, Res, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Res, UseGuards } from '@nestjs/common';
 import { Response } from 'express';
 import { z } from 'zod';
 import { zodBody } from '../../../common/http/zod-validation.pipe';
@@ -15,6 +15,7 @@ const CreateSchema = z.object({
   agentIds: z.array(z.string()).min(1),
 });
 const AddAgentSchema = z.object({ agentId: z.string() });
+const RenameRoomSchema = z.object({ name: z.string().min(1) });
 const DiscussSchema = z.object({ topic: z.string().min(1) });
 const CreateTopicSchema = z.object({ title: z.string().min(1) });
 const TopicDiscussSchema = z.object({ message: z.string().min(1) });
@@ -47,6 +48,15 @@ export class AgentRoomsController {
     return { room, agents };
   }
 
+  @Patch('rooms/:roomId')
+  @UseGuards(WorkspaceMemberGuard)
+  rename(
+    @ScopedRoom() room: Room,
+    @Body(zodBody(RenameRoomSchema)) body: z.infer<typeof RenameRoomSchema>,
+  ) {
+    return this.rooms.renameRoom(room, body.name);
+  }
+
   @Get('rooms/:roomId/topics')
   @UseGuards(WorkspaceMemberGuard)
   listTopics(@ScopedRoom() room: Room) {
@@ -66,6 +76,22 @@ export class AgentRoomsController {
   @UseGuards(WorkspaceMemberGuard)
   getTopicMessages(@ScopedRoom() room: Room, @Param('topicId') topicId: string) {
     return this.rooms.getTopicMessages(room, topicId);
+  }
+
+  @Get('rooms/:roomId/topics/:topicId/download')
+  @UseGuards(WorkspaceMemberGuard)
+  async downloadTopic(
+    @ScopedRoom() room: Room,
+    @Param('topicId') topicId: string,
+    @Res() res: Response,
+  ) {
+    const { filename, markdown } = await this.rooms.getTopicMarkdown(room, topicId);
+    res.setHeader('Content-Type', 'text/markdown; charset=utf-8');
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename*=UTF-8''${encodeURIComponent(filename)}`,
+    );
+    res.send(markdown);
   }
 
   @Post('rooms/:roomId/agents')

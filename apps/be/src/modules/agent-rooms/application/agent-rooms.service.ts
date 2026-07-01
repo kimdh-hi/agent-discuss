@@ -1,10 +1,11 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import { EntityRepository } from '@mikro-orm/core';
 import { InjectRepository } from '@mikro-orm/nestjs';
 import { BaseException } from '../../../common/errors/base.exception';
 import { ErrorCode } from '../../../common/errors/error-code';
 import { Agent, Room, RoomAgent, RoomTopic, RoomTopicMessage } from '../../../common/database/entities.registry';
 import { LlmService } from '../../../common/ai/llm/llm.service';
+import { CACHE_PORT, type CachePort } from '../../../common/cache/cache.port';
 import { RagService } from '../../rag/application/rag.service';
 import { AgentMemoryService } from '../../agent-memory/application/agent-memory.service';
 import { Observable } from 'rxjs';
@@ -15,6 +16,7 @@ import {
   RoomEvent,
   TurnEntry,
   DiscussionSnapshot,
+  RecalledMemory,
 } from './discussion/discussion.types';
 import { DEFAULT_MODEL_ID } from './discussion/discussion-config';
 import { DISCUSSION_LIMITS } from './discussion/discussion-limits';
@@ -53,6 +55,7 @@ export class AgentRoomsService {
     private readonly llm: LlmService,
     private readonly rag: RagService,
     private readonly agentMemory: AgentMemoryService,
+    @Inject(CACHE_PORT) private readonly ragCache: CachePort,
   ) {}
 
   async create(workspaceId: string, name: string, agentIds: string[]): Promise<Room> {
@@ -149,6 +152,20 @@ export class AgentRoomsService {
     return { topic, messages: await this.toTopicMessageDtos(messages) };
   }
 
+  async renameRoom(room: Room, name: string): Promise<Room> {
+    room.name = name.trim();
+    await this.roomRepository.getEntityManager().flush();
+    return room;
+  }
+
+  async getTopicMarkdown(room: Room, topicId: string): Promise<{ filename: string; markdown: string }> {
+    const topic = await this.getTopicOrThrow(room, topicId);
+    const body = topic.finalText?.trim() ? topic.finalText : '결론이 아직 작성되지 않았습니다.';
+    const markdown = `# ${topic.title}\n\n${body}\n`;
+    const slug = topic.title.trim().replace(/[^\p{L}\p{N}]+/gu, '-').replace(/^-+|-+$/g, '').slice(0, 60) || 'discussion';
+    return { filename: `${slug}.md`, markdown };
+  }
+
   async subscribeTopic(room: Room, topicId: string): Promise<Observable<RoomEvent> | null> {
     await this.getTopicOrThrow(room, topicId);
     return this.hub.subscribe(topicId);
@@ -193,6 +210,7 @@ export class AgentRoomsService {
       signal: controller.signal,
       initialSnapshot: restoredSnapshot ?? undefined,
       agentMemories,
+      ragCache: this.ragCache,
     });
 
     const completionPromise = completion
@@ -210,11 +228,11 @@ export class AgentRoomsService {
   private async recallAgentMemories(
     specs: RoomAgentSpec[],
     query: string,
-  ): Promise<Record<string, string[]>> {
+  ): Promise<Record<string, RecalledMemory[]>> {
     const entries = await Promise.all(
       specs.map(async (spec) => [spec.id, await this.agentMemory.recall(spec.id, query)] as const),
     );
-    const result: Record<string, string[]> = {};
+    const result: Record<string, RecalledMemory[]> = {};
     for (const [id, memories] of entries) {
       if (memories.length > 0) result[id] = memories;
     }
